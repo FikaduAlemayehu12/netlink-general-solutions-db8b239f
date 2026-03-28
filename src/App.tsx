@@ -72,6 +72,7 @@ const App = () => (
 
             {/* ===== STAFF PORTAL ===== */}
             <Route path="/staff/login" element={<StaffLogin />} />
+            <Route path="/staff/change-password" element={<StaffGuard><ChangePassword /></StaffGuard>} />
             
             <Route path="/staff/dashboard" element={<StaffGuard><StaffDashboard /></StaffGuard>} />
             <Route path="/staff/plans" element={<StaffGuard><PlansPage /></StaffGuard>} />
