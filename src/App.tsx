@@ -22,6 +22,7 @@ import NotFound from "./pages/NotFound";
 
 // Staff portal pages
 import StaffLogin from "./pages/staff/StaffLogin";
+import ChangePassword from "./pages/staff/ChangePassword";
 
 import StaffDashboard from "./pages/staff/StaffDashboard";
 import PlansPage from "./pages/staff/PlansPage";
