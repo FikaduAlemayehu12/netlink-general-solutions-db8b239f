@@ -88,6 +88,30 @@ export type Database = {
         }
         Relationships: []
       }
+      departments: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       direct_messages: {
         Row: {
           attachment_urls: string[] | null
@@ -999,6 +1023,118 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      staff_permissions: {
+        Row: {
+          can_create_staff: boolean
+          can_edit_profiles: boolean
+          can_manage_attendance: boolean
+          can_manage_projects: boolean
+          can_manage_salary: boolean
+          can_pause_users: boolean
+          can_post_announcements: boolean
+          can_reset_passwords: boolean
+          granted_by: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          can_create_staff?: boolean
+          can_edit_profiles?: boolean
+          can_manage_attendance?: boolean
+          can_manage_projects?: boolean
+          can_manage_salary?: boolean
+          can_pause_users?: boolean
+          can_post_announcements?: boolean
+          can_reset_passwords?: boolean
+          granted_by: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          can_create_staff?: boolean
+          can_edit_profiles?: boolean
+          can_manage_attendance?: boolean
+          can_manage_projects?: boolean
+          can_manage_salary?: boolean
+          can_pause_users?: boolean
+          can_post_announcements?: boolean
+          can_reset_passwords?: boolean
+          granted_by?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      staff_sub_departments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string
+          id: string
+          sub_department_id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by: string
+          id?: string
+          sub_department_id: string
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string
+          id?: string
+          sub_department_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_sub_departments_sub_department_id_fkey"
+            columns: ["sub_department_id"]
+            isOneToOne: false
+            referencedRelation: "sub_departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sub_departments: {
+        Row: {
+          created_at: string
+          created_by: string
+          department_id: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          department_id: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          department_id?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sub_departments_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
           },
         ]
       }
