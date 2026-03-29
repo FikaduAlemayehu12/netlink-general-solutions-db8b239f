@@ -1,0 +1,1 @@
+ALTER TABLE public.project_groups ADD COLUMN IF NOT EXISTS attachment_urls text[] DEFAULT '{}'::text[];

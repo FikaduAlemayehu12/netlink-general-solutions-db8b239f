@@ -622,6 +622,7 @@ export type Database = {
       }
       project_groups: {
         Row: {
+          attachment_urls: string[] | null
           budget: number | null
           completed_at: string | null
           created_at: string
@@ -638,6 +639,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          attachment_urls?: string[] | null
           budget?: number | null
           completed_at?: string | null
           created_at?: string
@@ -654,6 +656,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          attachment_urls?: string[] | null
           budget?: number | null
           completed_at?: string | null
           created_at?: string

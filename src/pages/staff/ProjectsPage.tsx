@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, FolderKanban, Users, Circle, Clock, Check, ChevronRight, MessageSquare, BarChart3, CalendarIcon, Target, AlertTriangle, CheckCircle, Flag, Send, Trash2, Paperclip, File, Archive, FileText, ClipboardList } from "lucide-react";
+import { Plus, FolderKanban, Users, Circle, Clock, Check, ChevronRight, MessageSquare, BarChart3, CalendarIcon, Target, AlertTriangle, CheckCircle, Flag, Send, Trash2, Paperclip, File, Archive, FileText, ClipboardList, Download, Image } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -136,7 +136,8 @@ export default function ProjectsPage() {
       member_ids: memberIds,
       start_date: groupForm.start_date ? format(groupForm.start_date, "yyyy-MM-dd") : null,
       end_date: groupForm.end_date ? format(groupForm.end_date, "yyyy-MM-dd") : null,
-    });
+      attachment_urls: groupForm.attachments.length > 0 ? groupForm.attachments : [],
+    } as any);
     setGroupForm({ name: "", description: "", member_ids: [], start_date: undefined, end_date: undefined, attachments: [] });
     setShowNewGroup(false);
     loadGroups();
@@ -484,6 +485,33 @@ export default function ProjectsPage() {
                   )}
                 </AnimatePresence>
 
+                {/* Project Attachments (initial files) */}
+                {selectedGroup.attachment_urls?.length > 0 && (
+                  <Card className="border-primary/20 bg-primary/5">
+                    <CardContent className="p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Paperclip className="w-3.5 h-3.5 text-primary" />
+                        <span className="text-xs font-heading font-semibold text-primary">Project Attachments</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedGroup.attachment_urls.map((url: string, i: number) => {
+                          const isImg = /\.(png|jpg|jpeg|gif|webp)$/i.test(url);
+                          return isImg ? (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group relative">
+                              <img src={url} alt="" className="w-16 h-16 rounded object-cover border border-border hover:ring-2 ring-primary transition-all" />
+                              <Download className="w-3 h-3 absolute bottom-1 right-1 text-primary-foreground bg-primary/70 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </a>
+                          ) : (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2 py-1 bg-muted rounded text-xs text-primary hover:underline">
+                              <File className="w-3 h-3" /><Download className="w-3 h-3" />File {i + 1}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Final deliverables for completed projects */}
                 {isCompleted && selectedGroup.final_attachment_urls?.length > 0 && (
                   <Card className="border-green-600/20 bg-green-50/50 dark:bg-green-900/10">
@@ -496,12 +524,13 @@ export default function ProjectsPage() {
                         {selectedGroup.final_attachment_urls.map((url: string, i: number) => {
                           const isImg = /\.(png|jpg|jpeg|gif|webp)$/i.test(url);
                           return isImg ? (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group relative">
                               <img src={url} alt="" className="w-16 h-16 rounded object-cover border border-border hover:ring-2 ring-primary transition-all" />
+                              <Download className="w-3 h-3 absolute bottom-1 right-1 text-primary-foreground bg-primary/70 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </a>
                           ) : (
                             <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2 py-1 bg-muted rounded text-xs text-primary hover:underline">
-                              <File className="w-3 h-3" />File {i + 1}
+                              <File className="w-3 h-3" /><Download className="w-3 h-3" />File {i + 1}
                             </a>
                           );
                         })}
@@ -570,6 +599,7 @@ export default function ProjectsPage() {
                   <TabsList className="w-full">
                     <TabsTrigger value="tasks" className="flex-1 gap-1"><Circle className="w-3 h-3" />Tasks</TabsTrigger>
                     <TabsTrigger value="updates" className="flex-1 gap-1"><ClipboardList className="w-3 h-3" />Updates</TabsTrigger>
+                    <TabsTrigger value="files" className="flex-1 gap-1"><Paperclip className="w-3 h-3" />Files</TabsTrigger>
                     <TabsTrigger value="milestones" className="flex-1 gap-1"><Target className="w-3 h-3" />Milestones</TabsTrigger>
                     <TabsTrigger value="comments" className="flex-1 gap-1"><MessageSquare className="w-3 h-3" />Comments</TabsTrigger>
                   </TabsList>
@@ -771,6 +801,94 @@ export default function ProjectsPage() {
                         })}
                       </div>
                     )}
+                  </TabsContent>
+
+                  {/* FILES TAB - All project files consolidated */}
+                  <TabsContent value="files" className="space-y-3">
+                    {(() => {
+                      const allFiles: { url: string; source: string; author?: string; date?: string }[] = [];
+                      
+                      // Project-level attachments
+                      (selectedGroup.attachment_urls || []).forEach((url: string) => {
+                        allFiles.push({ url, source: "Project Requirements", date: selectedGroup.created_at });
+                      });
+                      
+                      // Task attachments
+                      tasks.forEach((t) => {
+                        (t.attachments || []).forEach((url: string) => {
+                          const assignee = t.assignee?.full_name || profiles.find((p: any) => p.user_id === t.created_by)?.full_name || "Unknown";
+                          allFiles.push({ url, source: `Task: ${t.title}`, author: assignee, date: t.created_at });
+                        });
+                      });
+                      
+                      // Update attachments
+                      updates.forEach((u) => {
+                        (u.attachment_urls || []).forEach((url: string) => {
+                          const author = profiles.find((p: any) => p.user_id === u.author_id)?.full_name || "Unknown";
+                          allFiles.push({ url, source: `${u.update_type} update`, author, date: u.created_at });
+                        });
+                      });
+                      
+                      // Final deliverables
+                      (selectedGroup.final_attachment_urls || []).forEach((url: string) => {
+                        allFiles.push({ url, source: "Final Deliverable", date: selectedGroup.completed_at });
+                      });
+
+                      if (allFiles.length === 0) {
+                        return (
+                          <div className="py-8 text-center text-muted-foreground">
+                            <Paperclip className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm font-heading">No files attached to this project yet</p>
+                            <p className="text-xs mt-1">Files from tasks, updates, and deliverables will appear here</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                          <p className="text-xs text-muted-foreground">{allFiles.length} file(s) across all project activities</p>
+                          {allFiles.map((f, i) => {
+                            const isImg = /\.(png|jpg|jpeg|gif|webp)$/i.test(f.url);
+                            const fileName = (() => {
+                              try {
+                                const parts = f.url.split("/");
+                                return decodeURIComponent(parts[parts.length - 1]).replace(/^\d+_[a-z0-9]+\./, "file.");
+                              } catch { return `File ${i + 1}`; }
+                            })();
+                            return (
+                              <Card key={i}>
+                                <CardContent className="p-3">
+                                  <div className="flex items-center gap-3">
+                                    {isImg ? (
+                                      <a href={f.url} target="_blank" rel="noopener noreferrer">
+                                        <img src={f.url} alt="" className="w-12 h-12 rounded object-cover border border-border hover:ring-2 ring-primary transition-all flex-shrink-0" />
+                                      </a>
+                                    ) : (
+                                      <div className="w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                                        <FileText className="w-5 h-5 text-muted-foreground" />
+                                      </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-sm font-heading font-semibold text-primary hover:underline truncate block">
+                                        {fileName}
+                                      </a>
+                                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                        <span className="bg-muted px-1.5 py-0.5 rounded capitalize">{f.source}</span>
+                                        {f.author && <span>by {f.author}</span>}
+                                        {f.date && <span>{format(new Date(f.date), "MMM d, yyyy")}</span>}
+                                      </div>
+                                    </div>
+                                    <a href={f.url} target="_blank" rel="noopener noreferrer" title="Download" className="flex-shrink-0 p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-primary">
+                                      <Download className="w-4 h-4" />
+                                    </a>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </TabsContent>
 
                   {/* MILESTONES TAB */}
