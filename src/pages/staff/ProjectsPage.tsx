@@ -485,6 +485,33 @@ export default function ProjectsPage() {
                   )}
                 </AnimatePresence>
 
+                {/* Project Attachments (initial files) */}
+                {selectedGroup.attachment_urls?.length > 0 && (
+                  <Card className="border-primary/20 bg-primary/5">
+                    <CardContent className="p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Paperclip className="w-3.5 h-3.5 text-primary" />
+                        <span className="text-xs font-heading font-semibold text-primary">Project Attachments</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedGroup.attachment_urls.map((url: string, i: number) => {
+                          const isImg = /\.(png|jpg|jpeg|gif|webp)$/i.test(url);
+                          return isImg ? (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group relative">
+                              <img src={url} alt="" className="w-16 h-16 rounded object-cover border border-border hover:ring-2 ring-primary transition-all" />
+                              <Download className="w-3 h-3 absolute bottom-1 right-1 text-primary-foreground bg-primary/70 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </a>
+                          ) : (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2 py-1 bg-muted rounded text-xs text-primary hover:underline">
+                              <File className="w-3 h-3" /><Download className="w-3 h-3" />File {i + 1}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Final deliverables for completed projects */}
                 {isCompleted && selectedGroup.final_attachment_urls?.length > 0 && (
                   <Card className="border-green-600/20 bg-green-50/50 dark:bg-green-900/10">
@@ -497,12 +524,13 @@ export default function ProjectsPage() {
                         {selectedGroup.final_attachment_urls.map((url: string, i: number) => {
                           const isImg = /\.(png|jpg|jpeg|gif|webp)$/i.test(url);
                           return isImg ? (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group relative">
                               <img src={url} alt="" className="w-16 h-16 rounded object-cover border border-border hover:ring-2 ring-primary transition-all" />
+                              <Download className="w-3 h-3 absolute bottom-1 right-1 text-primary-foreground bg-primary/70 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </a>
                           ) : (
                             <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2 py-1 bg-muted rounded text-xs text-primary hover:underline">
-                              <File className="w-3 h-3" />File {i + 1}
+                              <File className="w-3 h-3" /><Download className="w-3 h-3" />File {i + 1}
                             </a>
                           );
                         })}
