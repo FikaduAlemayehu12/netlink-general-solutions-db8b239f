@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, FolderKanban, Users, Circle, Clock, Check, ChevronRight, MessageSquare, BarChart3, CalendarIcon, Target, AlertTriangle, CheckCircle, Flag, Send, Trash2, Paperclip, File, Archive, FileText, ClipboardList } from "lucide-react";
+import { Plus, FolderKanban, Users, Circle, Clock, Check, ChevronRight, MessageSquare, BarChart3, CalendarIcon, Target, AlertTriangle, CheckCircle, Flag, Send, Trash2, Paperclip, File, Archive, FileText, ClipboardList, Download, Image } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
