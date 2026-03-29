@@ -136,7 +136,8 @@ export default function ProjectsPage() {
       member_ids: memberIds,
       start_date: groupForm.start_date ? format(groupForm.start_date, "yyyy-MM-dd") : null,
       end_date: groupForm.end_date ? format(groupForm.end_date, "yyyy-MM-dd") : null,
-    });
+      attachment_urls: groupForm.attachments.length > 0 ? groupForm.attachments : [],
+    } as any);
     setGroupForm({ name: "", description: "", member_ids: [], start_date: undefined, end_date: undefined, attachments: [] });
     setShowNewGroup(false);
     loadGroups();
@@ -570,6 +571,7 @@ export default function ProjectsPage() {
                   <TabsList className="w-full">
                     <TabsTrigger value="tasks" className="flex-1 gap-1"><Circle className="w-3 h-3" />Tasks</TabsTrigger>
                     <TabsTrigger value="updates" className="flex-1 gap-1"><ClipboardList className="w-3 h-3" />Updates</TabsTrigger>
+                    <TabsTrigger value="files" className="flex-1 gap-1"><Paperclip className="w-3 h-3" />Files</TabsTrigger>
                     <TabsTrigger value="milestones" className="flex-1 gap-1"><Target className="w-3 h-3" />Milestones</TabsTrigger>
                     <TabsTrigger value="comments" className="flex-1 gap-1"><MessageSquare className="w-3 h-3" />Comments</TabsTrigger>
                   </TabsList>
