@@ -803,6 +803,94 @@ export default function ProjectsPage() {
                     )}
                   </TabsContent>
 
+                  {/* FILES TAB - All project files consolidated */}
+                  <TabsContent value="files" className="space-y-3">
+                    {(() => {
+                      const allFiles: { url: string; source: string; author?: string; date?: string }[] = [];
+                      
+                      // Project-level attachments
+                      (selectedGroup.attachment_urls || []).forEach((url: string) => {
+                        allFiles.push({ url, source: "Project Requirements", date: selectedGroup.created_at });
+                      });
+                      
+                      // Task attachments
+                      tasks.forEach((t) => {
+                        (t.attachments || []).forEach((url: string) => {
+                          const assignee = t.assignee?.full_name || profiles.find((p: any) => p.user_id === t.created_by)?.full_name || "Unknown";
+                          allFiles.push({ url, source: `Task: ${t.title}`, author: assignee, date: t.created_at });
+                        });
+                      });
+                      
+                      // Update attachments
+                      updates.forEach((u) => {
+                        (u.attachment_urls || []).forEach((url: string) => {
+                          const author = profiles.find((p: any) => p.user_id === u.author_id)?.full_name || "Unknown";
+                          allFiles.push({ url, source: `${u.update_type} update`, author, date: u.created_at });
+                        });
+                      });
+                      
+                      // Final deliverables
+                      (selectedGroup.final_attachment_urls || []).forEach((url: string) => {
+                        allFiles.push({ url, source: "Final Deliverable", date: selectedGroup.completed_at });
+                      });
+
+                      if (allFiles.length === 0) {
+                        return (
+                          <div className="py-8 text-center text-muted-foreground">
+                            <Paperclip className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm font-heading">No files attached to this project yet</p>
+                            <p className="text-xs mt-1">Files from tasks, updates, and deliverables will appear here</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                          <p className="text-xs text-muted-foreground">{allFiles.length} file(s) across all project activities</p>
+                          {allFiles.map((f, i) => {
+                            const isImg = /\.(png|jpg|jpeg|gif|webp)$/i.test(f.url);
+                            const fileName = (() => {
+                              try {
+                                const parts = f.url.split("/");
+                                return decodeURIComponent(parts[parts.length - 1]).replace(/^\d+_[a-z0-9]+\./, "file.");
+                              } catch { return `File ${i + 1}`; }
+                            })();
+                            return (
+                              <Card key={i}>
+                                <CardContent className="p-3">
+                                  <div className="flex items-center gap-3">
+                                    {isImg ? (
+                                      <a href={f.url} target="_blank" rel="noopener noreferrer">
+                                        <img src={f.url} alt="" className="w-12 h-12 rounded object-cover border border-border hover:ring-2 ring-primary transition-all flex-shrink-0" />
+                                      </a>
+                                    ) : (
+                                      <div className="w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                                        <FileText className="w-5 h-5 text-muted-foreground" />
+                                      </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-sm font-heading font-semibold text-primary hover:underline truncate block">
+                                        {fileName}
+                                      </a>
+                                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                        <span className="bg-muted px-1.5 py-0.5 rounded capitalize">{f.source}</span>
+                                        {f.author && <span>by {f.author}</span>}
+                                        {f.date && <span>{format(new Date(f.date), "MMM d, yyyy")}</span>}
+                                      </div>
+                                    </div>
+                                    <a href={f.url} target="_blank" rel="noopener noreferrer" title="Download" className="flex-shrink-0 p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-primary">
+                                      <Download className="w-4 h-4" />
+                                    </a>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </TabsContent>
+
                   {/* MILESTONES TAB */}
                   <TabsContent value="milestones" className="space-y-3">
                     {isExecutive && !isCompleted && (
