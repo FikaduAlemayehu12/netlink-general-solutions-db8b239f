@@ -19,6 +19,8 @@ import StaffLayout from "@/components/staff/StaffLayout";
 import { format, endOfMonth, parseISO, eachDayOfInterval, differenceInCalendarDays } from "date-fns";
 import { calculateDeductions, getTaxBracketLabel } from "@/lib/ethiopian-tax";
 import { openPayslipPDF, type PayslipData } from "@/lib/payslip-pdf";
+import { calculateMonthlyAbsences, type MonthlyAbsenceSummary } from "@/lib/absence-penalty";
+import { isEthiopianHoliday, getExpectedHours } from "@/lib/ethiopian-holidays";
 import { toast } from "sonner";
 
 const PAYMENT_TYPES = [
@@ -261,8 +263,28 @@ export default function SalaryPage() {
     const overtimePay = parseFloat((totalOvertimeHours * hourlyRate * OVERTIME_MULTIPLIER).toFixed(2));
     grossSalary = parseFloat((grossSalary + overtimePay).toFixed(2));
 
-    // Ethiopian deductions
-    const deductions = calculateDeductions(grossSalary);
+    // Calculate absence penalties
+    const dailyRate = staffSalaryConfigs.length > 0
+      ? (() => {
+          const cfg = staffSalaryConfigs[0];
+          switch (cfg.payment_type) {
+            case "hourly": return cfg.amount * 8;
+            case "daily": return cfg.amount;
+            case "weekly": return cfg.amount / 5;
+            case "monthly": return cfg.amount / 22;
+            default: return 0;
+          }
+        })()
+      : 0;
+
+    const absenceSummary = await calculateMonthlyAbsences(calcStaff, parseISO(periodStart), dailyRate);
+    const absencePenalty = absenceSummary.totalPenaltyDeduction;
+
+    // Apply penalty to gross before tax
+    const adjustedGross = Math.max(0, grossSalary - absencePenalty);
+
+    // Ethiopian deductions on adjusted gross
+    const deductions = calculateDeductions(adjustedGross);
 
     setCalcResult({
       staffId: calcStaff,
@@ -275,6 +297,9 @@ export default function SalaryPage() {
       baseSalary: parseFloat((grossSalary - overtimePay).toFixed(2)),
       overtimePay,
       grossSalary,
+      absencePenalty,
+      absenceSummary,
+      adjustedGross,
       deductions,
     });
     setCalculating(false);
@@ -763,6 +788,41 @@ export default function SalaryPage() {
                         )}
                       </div>
 
+                      {/* Absence Penalties */}
+                      {calcResult.absenceSummary && (calcResult.absenceSummary.daysUnjustified > 0 || calcResult.absenceSummary.daysUnpaidLeave > 0) && (
+                        <div className="mb-6">
+                          <h4 className="font-heading font-semibold text-sm text-destructive mb-3 flex items-center gap-1">
+                            <AlertTriangle className="w-4 h-4" /> Absence Penalties
+                          </h4>
+                          <div className="space-y-2">
+                            {calcResult.absenceSummary.daysUnjustified > 0 && (
+                              <div className="flex justify-between p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                                <span className="text-sm">
+                                  Unjustified Absences ({calcResult.absenceSummary.daysUnjustified} days × 3x daily rate)
+                                </span>
+                                <span className="font-heading font-bold text-destructive">
+                                  - ETB {(calcResult.absenceSummary.daysUnjustified * calcResult.absenceSummary.dailyRate * 3).toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+                            {calcResult.absenceSummary.daysUnpaidLeave > 0 && (
+                              <div className="flex justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                <span className="text-sm">
+                                  Unpaid Leave ({calcResult.absenceSummary.daysUnpaidLeave} days)
+                                </span>
+                                <span className="font-heading font-bold text-amber-600">
+                                  - ETB {(calcResult.absenceSummary.daysUnpaidLeave * calcResult.absenceSummary.dailyRate).toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between p-2 text-xs text-muted-foreground">
+                              <span>Working days: {calcResult.absenceSummary.totalWorkingDays} | Present: {calcResult.absenceSummary.daysPresent} | Leave: {calcResult.absenceSummary.daysApprovedLeave}</span>
+                              <span>Total penalty: ETB {calcResult.absencePenalty.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Deductions */}
                       <div className="mb-6">
                         <h4 className="font-heading font-semibold text-sm text-muted-foreground mb-3">Ethiopian Tax & Deductions</h4>
@@ -784,13 +844,19 @@ export default function SalaryPage() {
 
                       {/* Summary */}
                       <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-5">
-                        <div className="grid grid-cols-3 gap-4 text-center">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
                           <div>
                             <div className="text-xs text-muted-foreground font-heading">Gross</div>
                             <div className="font-heading font-bold text-lg text-foreground">ETB {calcResult.grossSalary.toLocaleString()}</div>
                           </div>
+                          {calcResult.absencePenalty > 0 && (
+                            <div>
+                              <div className="text-xs text-muted-foreground font-heading">Absence Penalty</div>
+                              <div className="font-heading font-bold text-lg text-destructive">- ETB {calcResult.absencePenalty.toLocaleString()}</div>
+                            </div>
+                          )}
                           <div>
-                            <div className="text-xs text-muted-foreground font-heading">Deductions</div>
+                            <div className="text-xs text-muted-foreground font-heading">Tax & Pension</div>
                             <div className="font-heading font-bold text-lg text-destructive">- ETB {calcResult.deductions.totalDeductions.toLocaleString()}</div>
                           </div>
                           <div>

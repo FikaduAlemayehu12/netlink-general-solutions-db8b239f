@@ -1,9 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
-import { startOfMonth, endOfMonth, format } from "date-fns";
+import { startOfMonth, endOfMonth, format, eachDayOfInterval } from "date-fns";
+import { isWorkingDay, isSaturday, isEthiopianHoliday, getExpectedHours } from "./ethiopian-holidays";
 
 /**
  * Weighted Performance Scoring
  * Plans: 25%, Projects: 25%, Tickets: 25%, Attendance: 25%
+ * Integrates Ethiopian holidays and unjustified absence penalties
  */
 
 export interface WeightedScore {
@@ -95,26 +97,63 @@ export async function calculateWeightedPerformance(
     ? Math.round((resolvedTickets.length / tickets.length) * 100)
     : 100; // No tickets = full score
 
-  // --- ATTENDANCE SCORE (25%) ---
+  // --- ATTENDANCE SCORE (25%) --- (uses Ethiopian holidays)
   const attendanceRecords = attendanceRes.data || [];
-  // Calculate working days in month (Mon-Fri)
   const start = startOfMonth(monthDate);
   const end = endOfMonth(monthDate);
+  const today = new Date();
+  const effectiveEnd = end > today ? today : end;
+  
+  // Calculate working days excluding Ethiopian holidays
+  const allDays = eachDayOfInterval({ start, end: effectiveEnd });
   let workingDays = 0;
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    const day = cursor.getDay();
-    if (day !== 0 && day !== 6) workingDays++;
-    cursor.setDate(cursor.getDate() + 1);
+  for (const day of allDays) {
+    const expected = getExpectedHours(day);
+    if (expected > 0) workingDays++;
   }
-  const daysPresent = attendanceRecords.length;
+  
+  // Count unique days present
+  const presentDates = new Set<string>();
+  for (const a of attendanceRecords) {
+    presentDates.add(a.clock_in.slice(0, 10));
+  }
+  const daysPresent = presentDates.size;
+  
+  // Fetch approved leaves for the month
+  const { data: leavesData } = await supabase
+    .from("leave_requests")
+    .select("start_date, end_date, status")
+    .eq("user_id", staffId)
+    .eq("status", "approved")
+    .lte("start_date", format(end, "yyyy-MM-dd"))
+    .gte("end_date", format(start, "yyyy-MM-dd"));
+  
+  // Count approved leave days
+  let approvedLeaveDays = 0;
+  for (const leave of (leavesData || [])) {
+    const ls = new Date(leave.start_date);
+    const le = new Date(leave.end_date);
+    const leaveDays = eachDayOfInterval({ start: ls > start ? ls : start, end: le < effectiveEnd ? le : effectiveEnd });
+    for (const d of leaveDays) {
+      if (getExpectedHours(d) > 0 && !presentDates.has(format(d, "yyyy-MM-dd"))) {
+        approvedLeaveDays++;
+      }
+    }
+  }
+  
+  // Unjustified = working days - present - approved leave
+  const unjustifiedDays = Math.max(0, workingDays - daysPresent - approvedLeaveDays);
+  
   const avgHours = attendanceRecords.length > 0
     ? attendanceRecords.reduce((sum, r) => sum + Number(r.work_hours || 0), 0) / attendanceRecords.length
     : 0;
-  // Score: attendance ratio + hours factor (8h = full)
-  const attendanceRatio = workingDays > 0 ? Math.min(1, daysPresent / workingDays) : 0;
+  
+  // Score: attendance ratio + hours factor, with unjustified penalty (1.5x weight)
+  const effectivePresent = daysPresent + approvedLeaveDays;
+  const attendanceRatio = workingDays > 0 ? Math.min(1, effectivePresent / workingDays) : 0;
   const hoursFactor = avgHours >= 8 ? 1 : avgHours / 8;
-  const attendanceScore = Math.round(((attendanceRatio * 0.7) + (hoursFactor * 0.3)) * 100);
+  const unjustifiedPenalty = workingDays > 0 ? (unjustifiedDays / workingDays) * 1.5 : 0;
+  const attendanceScore = Math.max(0, Math.round(((attendanceRatio * 0.7) + (hoursFactor * 0.3)) * 100 - unjustifiedPenalty * 100));
 
   // --- OVERALL WEIGHTED SCORE ---
   const overallScore = Math.round(
