@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Clock, LogIn, LogOut, Calendar, Timer, PlaneTakeoff, CheckCircle, X, Plus, Users, Download } from "lucide-react";
+import { Clock, LogIn, LogOut, Calendar, Timer, PlaneTakeoff, CheckCircle, X, Plus, Users, Download, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -10,28 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import StaffLayout from "@/components/staff/StaffLayout";
 import ExecutiveAttendanceView from "@/components/staff/ExecutiveAttendanceView";
+import LiveAttendanceIndicators from "@/components/staff/LiveAttendanceIndicators";
 import { buildStaffSummaries, exportCSV, exportPDF } from "@/lib/attendance-export";
+import { isEthiopianHoliday, getExpectedHours, getUpcomingHolidays } from "@/lib/ethiopian-holidays";
 
 const LEAVE_TYPES = ["annual", "sick", "personal", "maternity", "paternity", "unpaid"];
 
-// Ethiopian public holidays (approximate dates, updated annually)
-const ETHIOPIAN_PUBLIC_HOLIDAYS_2025 = [
-  "2025-01-07", // Christmas (Genna)
-  "2025-01-19", // Epiphany (Timkat)
-  "2025-03-02", // Battle of Adwa
-  "2025-04-18", // Good Friday
-  "2025-04-20", // Easter
-  "2025-05-01", // Labour Day
-  "2025-05-05", // Patriots' Victory Day
-  "2025-05-28", // Derg Downfall Day
-  "2025-09-11", // New Year (Enkutatash)
-  "2025-09-27", // Meskel
-];
-
 function isPublicHoliday(dateStr: string): boolean {
-  const d = dateStr.slice(0, 10);
-  // Check current year and next year patterns
-  return ETHIOPIAN_PUBLIC_HOLIDAYS_2025.some(h => h.slice(5) === d.slice(5));
+  return !!isEthiopianHoliday(dateStr);
 }
 
 // Working hours: Mon-Fri 7:30-11:30 & 13:00-23:00, Sat 7:30-11:30
@@ -463,7 +449,36 @@ export default function AttendancePage() {
         )}
 
         {activeTab === "executive" && isExecutive && (
-          <ExecutiveAttendanceView profiles={profiles} />
+          <div className="space-y-6">
+            {/* Live attendance indicators */}
+            <LiveAttendanceIndicators profiles={profiles} />
+
+            {/* Upcoming Ethiopian Holidays */}
+            {(() => {
+              const upcoming = getUpcomingHolidays(new Date(), 60);
+              if (upcoming.length === 0) return null;
+              return (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-heading flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-primary" /> Upcoming Ethiopian Holidays
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      {upcoming.map(h => (
+                        <Badge key={h.date} variant="secondary" className="text-xs py-1">
+                          {h.name} ({h.nameAmharic}) — {new Date(h.date).toLocaleDateString()}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            <ExecutiveAttendanceView profiles={profiles} />
+          </div>
         )}
       </div>
     </StaffLayout>
