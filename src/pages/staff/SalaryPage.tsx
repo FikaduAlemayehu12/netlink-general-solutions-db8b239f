@@ -263,8 +263,28 @@ export default function SalaryPage() {
     const overtimePay = parseFloat((totalOvertimeHours * hourlyRate * OVERTIME_MULTIPLIER).toFixed(2));
     grossSalary = parseFloat((grossSalary + overtimePay).toFixed(2));
 
-    // Ethiopian deductions
-    const deductions = calculateDeductions(grossSalary);
+    // Calculate absence penalties
+    const dailyRate = staffSalaryConfigs.length > 0
+      ? (() => {
+          const cfg = staffSalaryConfigs[0];
+          switch (cfg.payment_type) {
+            case "hourly": return cfg.amount * 8;
+            case "daily": return cfg.amount;
+            case "weekly": return cfg.amount / 5;
+            case "monthly": return cfg.amount / 22;
+            default: return 0;
+          }
+        })()
+      : 0;
+
+    const absenceSummary = await calculateMonthlyAbsences(calcStaff, parseISO(periodStart), dailyRate);
+    const absencePenalty = absenceSummary.totalPenaltyDeduction;
+
+    // Apply penalty to gross before tax
+    const adjustedGross = Math.max(0, grossSalary - absencePenalty);
+
+    // Ethiopian deductions on adjusted gross
+    const deductions = calculateDeductions(adjustedGross);
 
     setCalcResult({
       staffId: calcStaff,
@@ -277,6 +297,9 @@ export default function SalaryPage() {
       baseSalary: parseFloat((grossSalary - overtimePay).toFixed(2)),
       overtimePay,
       grossSalary,
+      absencePenalty,
+      absenceSummary,
+      adjustedGross,
       deductions,
     });
     setCalculating(false);
