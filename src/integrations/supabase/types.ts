@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          module: string
+          target_id: string | null
+          target_type: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          module: string
+          target_id?: string | null
+          target_type?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          module?: string
+          target_id?: string | null
+          target_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       announcements: {
         Row: {
           author_id: string
@@ -1141,6 +1174,8 @@ export type Database = {
       support_tickets: {
         Row: {
           assigned_to: string | null
+          assigned_to_ids: string[] | null
+          attachment_urls: string[] | null
           category: string
           closed_at: string | null
           created_at: string
@@ -1157,6 +1192,8 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          assigned_to_ids?: string[] | null
+          attachment_urls?: string[] | null
           category?: string
           closed_at?: string | null
           created_at?: string
@@ -1173,6 +1210,8 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          assigned_to_ids?: string[] | null
+          attachment_urls?: string[] | null
           category?: string
           closed_at?: string | null
           created_at?: string

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Network, LayoutDashboard, FileText, Users, Trophy, FolderKanban,
-  Bell, Settings, LogOut, Menu, X, ChevronDown, User, Ticket, Clock, Megaphone, MessageSquare, Wallet
+  Bell, Settings, LogOut, Menu, X, ChevronDown, User, Ticket, Clock, Megaphone, MessageSquare, Wallet, Activity
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +24,7 @@ const navItems = [
 
 const adminItems = [
   { label: "User Management", path: "/staff/admin/users", icon: Users },
+  { label: "Activity Log", path: "/staff/activity-log", icon: Activity },
 ];
 
 export default function StaffLayout({ children }: { children: React.ReactNode }) {

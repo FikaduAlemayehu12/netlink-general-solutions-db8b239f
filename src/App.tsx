@@ -36,6 +36,7 @@ import TicketsPage from "./pages/staff/TicketsPage";
 import AttendancePage from "./pages/staff/AttendancePage";
 import MessagesPage from "./pages/staff/MessagesPage";
 import SalaryPage from "./pages/staff/SalaryPage";
+import ActivityLogPage from "./pages/staff/ActivityLogPage";
 
 const queryClient = new QueryClient();
 
@@ -87,6 +88,7 @@ const App = () => (
             <Route path="/staff/salary" element={<StaffGuard><SalaryPage /></StaffGuard>} />
             <Route path="/staff/settings" element={<StaffGuard><ProfilePage /></StaffGuard>} />
             <Route path="/staff/admin/users" element={<StaffGuard><AdminUsers /></StaffGuard>} />
+            <Route path="/staff/activity-log" element={<StaffGuard><ActivityLogPage /></StaffGuard>} />
 
             {/* Legacy routes */}
             <Route path="/admin/users" element={<StaffGuard><AdminUsers /></StaffGuard>} />
