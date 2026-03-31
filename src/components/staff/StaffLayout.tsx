@@ -24,6 +24,7 @@ const navItems = [
 
 const adminItems = [
   { label: "User Management", path: "/staff/admin/users", icon: Users },
+  { label: "Activity Log", path: "/staff/activity-log", icon: Activity },
 ];
 
 export default function StaffLayout({ children }: { children: React.ReactNode }) {
