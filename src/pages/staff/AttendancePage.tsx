@@ -162,17 +162,68 @@ export default function AttendancePage() {
     loadAttendance();
   };
 
+  const handleLeaveFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || !user) return;
+    setUploadingLeaveFiles(true);
+    const urls: string[] = [...leaveAttachments];
+    for (const file of Array.from(files)) {
+      if (file.size > 10 * 1024 * 1024) continue;
+      const path = `${user.id}/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from("leave-attachments").upload(path, file);
+      if (!error) {
+        const { data: pub } = supabase.storage.from("leave-attachments").getPublicUrl(path);
+        urls.push(pub.publicUrl);
+      }
+    }
+    setLeaveAttachments(urls);
+    setUploadingLeaveFiles(false);
+    if (leaveFileRef.current) leaveFileRef.current.value = "";
+  };
+
   const submitLeave = async () => {
-    if (!newLeave.start_date || !newLeave.end_date || !user) return;
-    await supabase.from("leave_requests").insert({
+    if (!newLeave.start_date || !newLeave.end_date || !user) {
+      toast({ title: "Start and end dates are required", variant: "destructive" });
+      return;
+    }
+    const { data } = await supabase.from("leave_requests").insert({
       user_id: user.id,
       leave_type: newLeave.leave_type,
       start_date: newLeave.start_date,
       end_date: newLeave.end_date,
       reason: newLeave.reason,
-    });
+      attachment_urls: leaveAttachments,
+    } as any).select().single();
+    await logActivity("create", "leave", data?.id, "leave_request", { type: newLeave.leave_type });
+    await notifyCeo("Submitted", "Leave", `${newLeave.leave_type} leave request`, user.id, data?.id);
     setNewLeave({ leave_type: "annual", start_date: "", end_date: "", reason: "" });
+    setLeaveAttachments([]);
     setShowLeaveForm(false);
+    loadLeaves();
+  };
+
+  const deleteLeave = async (leaveId: string) => {
+    if (!user) return;
+    const leave = leaveRequests.find(l => l.id === leaveId);
+    if (leave) {
+      await archiveAndDelete("leave_requests", leaveId, leave, user.id);
+      await logActivity("delete", "leave", leaveId, "leave_request");
+    }
+    toast({ title: "Leave request moved to recycle bin" });
+    loadLeaves();
+  };
+
+  const saveEditLeave = async () => {
+    if (!editingLeave || !user) return;
+    await supabase.from("leave_requests").update({
+      leave_type: editingLeave.leave_type,
+      start_date: editingLeave.start_date,
+      end_date: editingLeave.end_date,
+      reason: editingLeave.reason,
+    }).eq("id", editingLeave.id);
+    await logActivity("update", "leave", editingLeave.id, "leave_request");
+    setEditingLeave(null);
+    toast({ title: "Leave request updated" });
     loadLeaves();
   };
 
