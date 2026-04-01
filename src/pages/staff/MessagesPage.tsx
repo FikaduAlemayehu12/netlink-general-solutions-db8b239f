@@ -246,6 +246,7 @@ export default function MessagesPage() {
     setInput("");
     setSending(false);
     await logActivity("create", "messages", undefined, "direct_message", { to: selectedPartner });
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
