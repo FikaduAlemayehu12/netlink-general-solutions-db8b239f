@@ -121,6 +121,36 @@ export type Database = {
         }
         Relationships: []
       }
+      deleted_records: {
+        Row: {
+          deleted_at: string
+          deleted_by: string
+          id: string
+          original_id: string
+          original_table: string
+          reason: string | null
+          record_data: Json
+        }
+        Insert: {
+          deleted_at?: string
+          deleted_by: string
+          id?: string
+          original_id: string
+          original_table: string
+          reason?: string | null
+          record_data?: Json
+        }
+        Update: {
+          deleted_at?: string
+          deleted_by?: string
+          id?: string
+          original_id?: string
+          original_table?: string
+          reason?: string | null
+          record_data?: Json
+        }
+        Relationships: []
+      }
       departments: {
         Row: {
           created_at: string
@@ -214,6 +244,7 @@ export type Database = {
         Row: {
           approved_at: string | null
           approved_by: string | null
+          attachment_urls: string[] | null
           created_at: string
           end_date: string
           id: string
@@ -227,6 +258,7 @@ export type Database = {
         Insert: {
           approved_at?: string | null
           approved_by?: string | null
+          attachment_urls?: string[] | null
           created_at?: string
           end_date: string
           id?: string
@@ -240,6 +272,7 @@ export type Database = {
         Update: {
           approved_at?: string | null
           approved_by?: string | null
+          attachment_urls?: string[] | null
           created_at?: string
           end_date?: string
           id?: string
