@@ -1,14 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Send, ThumbsUp, ThumbsDown, CheckCircle, MessageCircle, ChevronDown, Paperclip, X, FileIcon, Download, Target } from "lucide-react";
+import { Plus, Send, ThumbsUp, ThumbsDown, CheckCircle, MessageCircle, ChevronDown, Paperclip, X, FileIcon, Download, Target, Edit2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import StaffLayout from "@/components/staff/StaffLayout";
 import { recordPlanPerformance } from "@/lib/performance-utils";
+import { logActivity } from "@/lib/activity-logger";
+import { archiveAndDelete, notifyCeo } from "@/lib/recycle-bin";
 import { toast } from "sonner";
 
 type PlanType = "daily" | "weekly" | "quarterly";
@@ -72,7 +79,7 @@ function MentionInput({ value, onChange, profiles }: { value: string; onChange: 
 }
 
 export default function PlansPage() {
-  const { user, isExecutive } = useAuth();
+  const { user, isExecutive, isCeo } = useAuth();
   const [plans, setPlans] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -88,25 +95,19 @@ export default function PlansPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPerfForm, setShowPerfForm] = useState<string | null>(null);
   const [perfForm, setPerfForm] = useState({ planned: "100", actual: "" });
+  const [editingPlan, setEditingPlan] = useState<any>(null);
+  const [deletePlanId, setDeletePlanId] = useState<string | null>(null);
+  const [editingComment, setEditingComment] = useState<{ id: string; content: string; planId: string } | null>(null);
 
   useEffect(() => {
     fetchPlans();
     fetchProfiles();
-
-    // Realtime subscription for live plan updates
     const channel = supabase
       .channel('plans-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'plans' }, () => {
-        fetchPlans();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_reactions' }, () => {
-        fetchPlans();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_comments' }, () => {
-        fetchPlans();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plans' }, () => fetchPlans())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_reactions' }, () => fetchPlans())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_comments' }, () => fetchPlans())
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [filter]);
 
@@ -124,12 +125,14 @@ export default function PlansPage() {
   };
 
   const submitPlan = async () => {
-    if (!form.title.trim() || !form.content.trim()) return;
+    if (!form.title.trim() || !form.content.trim()) {
+      toast.error("Title and content are required");
+      return;
+    }
     setSubmitting(true);
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
 
-    // Upload attachments
     let attachmentUrls: string[] = [];
     if (attachments.length > 0) {
       setUploadingFiles(true);
@@ -144,7 +147,6 @@ export default function PlansPage() {
       setUploadingFiles(false);
     }
 
-    // Extract mentions
     const mentionMatches = form.content.match(/@(\w+)/g) || [];
     const mentionedIds: string[] = [];
     for (const m of mentionMatches) {
@@ -154,35 +156,57 @@ export default function PlansPage() {
     }
 
     const { data: plan } = await supabase.from("plans").insert({
-      ...form,
-      author_id: authUser.id,
-      mentioned_user_ids: mentionedIds,
-      attachment_urls: attachmentUrls,
+      ...form, author_id: authUser.id, mentioned_user_ids: mentionedIds, attachment_urls: attachmentUrls,
     }).select().single();
 
-    // Auto-create a pending performance record for CEO review
     if (plan) {
       const periodKey = new Date().toISOString().slice(0, 10);
       await supabase.from("plan_performance_records").upsert({
-        staff_id: authUser.id,
-        plan_id: plan.id,
-        plan_type: form.plan_type,
-        period_key: periodKey,
-        planned_value: 100,
-        actual_value: 0,
-        status: "pending",
+        staff_id: authUser.id, plan_id: plan.id, plan_type: form.plan_type,
+        period_key: periodKey, planned_value: 100, actual_value: 0, status: "pending",
       }, { onConflict: "staff_id,plan_id" });
     }
 
     for (const uid of mentionedIds) {
-      await supabase.from("notifications").insert({ user_id: uid, type: "mention", title: "You were mentioned", message: `${authUser.email} mentioned you in a plan: "${form.title}"`, related_id: plan?.id });
+      await supabase.from("notifications").insert({ user_id: uid, type: "mention", title: "You were mentioned", message: `mentioned in plan: "${form.title}"`, related_id: plan?.id });
     }
+
+    await logActivity("create", "plans", plan?.id, "plan", { title: form.title });
+    await notifyCeo("Created", "Plans", `New ${form.plan_type} plan: ${form.title}`, authUser.id, plan?.id);
 
     setForm({ title: "", content: "", plan_type: "daily" });
     setAttachments([]);
     setShowForm(false);
     setSubmitting(false);
   };
+
+  // Edit plan
+  const saveEditPlan = async () => {
+    if (!editingPlan || !user) return;
+    await supabase.from("plans").update({
+      title: editingPlan.title, content: editingPlan.content, plan_type: editingPlan.plan_type,
+    }).eq("id", editingPlan.id);
+    await logActivity("update", "plans", editingPlan.id, "plan", { title: editingPlan.title });
+    await notifyCeo("Updated", "Plans", `Plan updated: ${editingPlan.title}`, user.id, editingPlan.id);
+    setEditingPlan(null);
+    toast.success("Plan updated");
+    fetchPlans();
+  };
+
+  // Delete plan with recycle bin
+  const confirmDeletePlan = async () => {
+    if (!deletePlanId || !user) return;
+    const plan = plans.find(p => p.id === deletePlanId);
+    if (plan) {
+      await archiveAndDelete("plans", deletePlanId, plan, user.id);
+      await logActivity("delete", "plans", deletePlanId, "plan", { title: plan.title });
+    }
+    setDeletePlanId(null);
+    toast.success("Plan moved to recycle bin");
+    fetchPlans();
+  };
+
+  const canModifyPlan = (plan: any) => isCeo || isExecutive || plan.author_id === user?.id;
 
   const react = async (planId: string, reaction: string) => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -217,20 +241,35 @@ export default function PlansPage() {
     if (plan && plan.author_id !== authUser.id) {
       await supabase.from("notifications").insert({ user_id: plan.author_id, type: "comment", title: "New comment on your plan", message: content.slice(0, 80), related_id: planId });
     }
+    await logActivity("comment", "plans", planId, "plan_comment", { comment: content.slice(0, 100) });
     setCommentInput((prev) => ({ ...prev, [planId]: "" }));
     fetchComments(planId);
   };
 
+  const deleteComment = async (commentId: string, planId: string) => {
+    if (!user) return;
+    const comment = comments[planId]?.find(c => c.id === commentId);
+    if (comment) {
+      await archiveAndDelete("plan_comments", commentId, comment, user.id);
+      await logActivity("delete", "plans", commentId, "plan_comment");
+    }
+    fetchComments(planId);
+  };
+
+  const saveEditComment = async () => {
+    if (!editingComment) return;
+    await supabase.from("plan_comments").update({ content: editingComment.content }).eq("id", editingComment.id);
+    setEditingComment(null);
+    fetchComments(editingComment.planId);
+  };
+
   const addFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    const maxSize = 100 * 1024 * 1024; // 100MB
-    const valid = files.filter((f) => f.size <= maxSize);
+    const valid = files.filter((f) => f.size <= 100 * 1024 * 1024);
     setAttachments((prev) => [...prev, ...valid]);
   };
 
-  const removeFile = (idx: number) => {
-    setAttachments((prev) => prev.filter((_, i) => i !== idx));
-  };
+  const removeFile = (idx: number) => setAttachments((prev) => prev.filter((_, i) => i !== idx));
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -285,10 +324,8 @@ export default function PlansPage() {
                   <Input placeholder="Plan title" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
                   <MentionInput value={form.content} onChange={(v) => setForm((f) => ({ ...f, content: v }))} profiles={profiles} />
 
-                  {/* File Attachments */}
                   <div>
-                    <button onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+                    <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
                       <Paperclip className="w-4 h-4" />Attach files (max 100MB each)
                     </button>
                     <input ref={fileInputRef} type="file" multiple className="hidden" onChange={addFiles} />
@@ -299,9 +336,7 @@ export default function PlansPage() {
                             <FileIcon className="w-4 h-4 text-primary flex-shrink-0" />
                             <span className="text-sm text-foreground flex-1 truncate">{file.name}</span>
                             <span className="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>
-                            <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
+                            <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                           </div>
                         ))}
                       </div>
@@ -355,11 +390,16 @@ export default function PlansPage() {
                           <span className="font-heading font-semibold text-foreground text-sm">{plan.profiles?.full_name}</span>
                           <span className={`px-2 py-0.5 rounded text-xs font-heading font-semibold uppercase ${typeColor[plan.plan_type]}`}>{plan.plan_type}</span>
                           <span className="text-xs text-muted-foreground ml-auto">{new Date(plan.created_at).toLocaleDateString()}</span>
+                          {canModifyPlan(plan) && (
+                            <div className="flex gap-1">
+                              <button onClick={() => setEditingPlan({ ...plan })} className="text-muted-foreground hover:text-foreground p-1"><Edit2 className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => setDeletePlanId(plan.id)} className="text-destructive hover:text-destructive/80 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                          )}
                         </div>
                         <div className="font-heading font-bold text-foreground mt-1">{plan.title}</div>
                         <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{plan.content}</p>
 
-                        {/* Attachments */}
                         {planAttachments.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {planAttachments.map((url: string, i: number) => {
@@ -393,7 +433,7 @@ export default function PlansPage() {
                           </button>
                         </div>
 
-                        {/* Performance Recording (own plans only) */}
+                        {/* Performance Recording */}
                         {plan.author_id === user?.id && (
                           <div className="mt-2">
                             {showPerfForm === plan.id ? (
@@ -438,13 +478,29 @@ export default function PlansPage() {
                           {expandedPlan === plan.id && (
                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-3 space-y-2">
                               {(comments[plan.id] || []).map((c) => (
-                                <div key={c.id} className="flex gap-2">
+                                <div key={c.id} className="flex gap-2 group">
                                   <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold font-heading text-foreground flex-shrink-0">
                                     {c.profiles?.full_name?.charAt(0)}
                                   </div>
                                   <div className="bg-muted rounded-xl px-3 py-2 flex-1">
-                                    <div className="text-xs font-semibold font-heading text-foreground">{c.profiles?.full_name}</div>
-                                    <div className="text-sm text-foreground mt-0.5">{c.content}</div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-semibold font-heading text-foreground">{c.profiles?.full_name}</span>
+                                      {(c.author_id === user?.id || isCeo) && (
+                                        <div className="ml-auto opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
+                                          <button onClick={() => setEditingComment({ id: c.id, content: c.content, planId: plan.id })} className="text-muted-foreground hover:text-foreground"><Edit2 className="w-3 h-3" /></button>
+                                          <button onClick={() => deleteComment(c.id, plan.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3 h-3" /></button>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {editingComment?.id === c.id ? (
+                                      <div className="flex gap-1 mt-1">
+                                        <Input value={editingComment.content} onChange={(e) => setEditingComment({ ...editingComment, content: e.target.value })} className="text-xs h-7" />
+                                        <Button size="sm" onClick={saveEditComment} className="h-7 text-xs">Save</Button>
+                                        <Button size="sm" variant="ghost" onClick={() => setEditingComment(null)} className="h-7 text-xs">✕</Button>
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-foreground mt-0.5">{c.content}</div>
+                                    )}
                                   </div>
                                 </div>
                               ))}
@@ -467,6 +523,49 @@ export default function PlansPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Plan Modal */}
+      <AnimatePresence>
+        {editingPlan && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-background/80 z-50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-lg">
+              <CardHeader><CardTitle className="font-heading">Edit Plan</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex gap-2">
+                  {(["daily", "weekly", "quarterly"] as PlanType[]).map((t) => (
+                    <button key={t} onClick={() => setEditingPlan({ ...editingPlan, plan_type: t })}
+                      className={`px-3 py-1 rounded-full text-xs font-heading font-semibold capitalize transition-colors ${editingPlan.plan_type === t ? typeColor[t] + " ring-1 ring-current" : "bg-muted text-muted-foreground"}`}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <Input value={editingPlan.title} onChange={(e) => setEditingPlan({ ...editingPlan, title: e.target.value })} />
+                <Textarea value={editingPlan.content} onChange={(e) => setEditingPlan({ ...editingPlan, content: e.target.value })} rows={5} />
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setEditingPlan(null)} className="flex-1">Cancel</Button>
+                  <Button onClick={saveEditPlan} className="flex-1 gradient-brand text-primary-foreground">Save</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deletePlanId} onOpenChange={(open) => !open && setDeletePlanId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this plan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The plan will be moved to the recycle bin and can be restored by the CEO.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeletePlan} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </StaffLayout>
   );
 }
