@@ -18,6 +18,8 @@ import {
 import StaffLayout from "@/components/staff/StaffLayout";
 import VideoCall from "@/components/staff/VideoCall";
 import { EMOJI_LIST } from "@/lib/emoji-constants";
+import { logActivity } from "@/lib/activity-logger";
+import { archiveAndDelete } from "@/lib/recycle-bin";
 
 interface Profile {
   user_id: string;
