@@ -37,6 +37,7 @@ import AttendancePage from "./pages/staff/AttendancePage";
 import MessagesPage from "./pages/staff/MessagesPage";
 import SalaryPage from "./pages/staff/SalaryPage";
 import ActivityLogPage from "./pages/staff/ActivityLogPage";
+import RecycleBinPage from "./pages/staff/RecycleBinPage";
 
 const queryClient = new QueryClient();
 
