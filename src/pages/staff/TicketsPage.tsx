@@ -250,7 +250,11 @@ export default function TicketsPage() {
   };
 
   const deleteComment = async (commentId: string) => {
-    await supabase.from("ticket_comments").delete().eq("id", commentId);
+    if (!user) return;
+    const comment = comments.find(c => c.id === commentId);
+    if (comment) {
+      await archiveAndDelete("ticket_comments", commentId, comment, user.id);
+    }
     loadComments(selectedTicket.id);
   };
 
