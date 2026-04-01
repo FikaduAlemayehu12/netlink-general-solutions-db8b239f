@@ -165,6 +165,7 @@ export default function TicketsPage() {
       }
     }
     await logActivity("create", "tickets", data?.id, "support_ticket", { title: newTicket.title });
+    await notifyCeo("Created", "Tickets", `New ticket: ${newTicket.title}`, user.id, data?.id);
     setNewTicket({ title: "", description: "", category: "General", priority: "medium", due_date: undefined });
     setAttachmentUrls([]);
     setSelectedAssignees([]);
