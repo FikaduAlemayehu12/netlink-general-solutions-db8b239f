@@ -474,9 +474,30 @@ export default function AttendancePage() {
                     <label className="text-sm font-medium font-heading">Reason</label>
                     <Textarea rows={3} placeholder="Reason for leave..." value={newLeave.reason} onChange={(e) => setNewLeave((p) => ({ ...p, reason: e.target.value }))} />
                   </div>
+                  {/* Attachments */}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium font-heading flex items-center gap-1.5">
+                      <Paperclip className="w-4 h-4" />Attachments (medical certificates, etc.)
+                    </label>
+                    <input ref={leaveFileRef} type="file" multiple className="hidden" onChange={handleLeaveFileUpload} />
+                    <Button type="button" variant="outline" size="sm" onClick={() => leaveFileRef.current?.click()} disabled={uploadingLeaveFiles}>
+                      {uploadingLeaveFiles ? "Uploading..." : "Choose Files"}
+                    </Button>
+                    {leaveAttachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {leaveAttachments.map((url, i) => (
+                          <div key={i} className="flex items-center gap-1.5 bg-muted rounded px-2 py-1 text-xs">
+                            <Paperclip className="w-3 h-3" />
+                            <span className="max-w-[120px] truncate">{decodeURIComponent(url.split("/").pop()?.split("?")[0] || "file").replace(/^\d+_/, "")}</span>
+                            <button onClick={() => setLeaveAttachments(prev => prev.filter((_, idx) => idx !== i))} className="text-destructive hover:text-destructive/80"><X className="w-3 h-3" /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex gap-3">
-                    <Button variant="outline" onClick={() => setShowLeaveForm(false)} className="flex-1">Cancel</Button>
-                    <Button onClick={submitLeave} className="flex-1 gradient-brand text-primary-foreground font-heading">Submit Request</Button>
+                    <Button variant="outline" onClick={() => { setShowLeaveForm(false); setLeaveAttachments([]); }} className="flex-1">Cancel</Button>
+                    <Button onClick={submitLeave} disabled={uploadingLeaveFiles} className="flex-1 gradient-brand text-primary-foreground font-heading">Submit Request</Button>
                   </div>
                 </CardContent>
               </Card>
