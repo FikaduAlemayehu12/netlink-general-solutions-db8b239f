@@ -348,8 +348,12 @@ export default function MessagesPage() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteMessageId) return;
-    await supabase.from("direct_messages").delete().eq("id", deleteMessageId);
+    if (!deleteMessageId || !user) return;
+    const msg = messages.find(m => m.id === deleteMessageId);
+    if (msg) {
+      await archiveAndDelete("direct_messages", deleteMessageId, msg, user.id);
+      await logActivity("delete", "messages", deleteMessageId, "direct_message");
+    }
     setMessages((prev) => prev.filter((m) => m.id !== deleteMessageId));
     setDeleteMessageId(null);
     loadConversations();
