@@ -234,6 +234,16 @@ export default function AttendancePage() {
       approved_by: user.id,
       approved_at: new Date().toISOString(),
     }).eq("id", leaveId);
+    await logActivity(approved ? "approve" : "reject", "leave", leaveId, "leave_request");
+    const leave = leaveRequests.find(l => l.id === leaveId);
+    if (leave) {
+      await supabase.from("notifications").insert({
+        user_id: leave.user_id, type: "leave",
+        title: `Leave ${approved ? "Approved" : "Rejected"}`,
+        message: `Your ${leave.leave_type} leave has been ${approved ? "approved" : "rejected"}`,
+        related_id: leaveId,
+      });
+    }
     loadLeaves();
   };
 
