@@ -184,12 +184,16 @@ export default function TicketsPage() {
     loadTickets();
   };
 
-  // Delete ticket
+  // Delete ticket (with recycle bin)
   const deleteTicket = async (ticketId: string) => {
-    await supabase.from("support_tickets").delete().eq("id", ticketId);
-    await logActivity("delete", "tickets", ticketId, "support_ticket");
+    if (!user) return;
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (ticket) {
+      await archiveAndDelete("support_tickets", ticketId, ticket, user.id);
+      await logActivity("delete", "tickets", ticketId, "support_ticket", { title: ticket.title });
+    }
     if (selectedTicket?.id === ticketId) setSelectedTicket(null);
-    toast({ title: "Ticket deleted" });
+    toast({ title: "Ticket moved to recycle bin" });
     loadTickets();
   };
 
