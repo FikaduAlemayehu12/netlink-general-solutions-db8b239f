@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import StaffLayout from "@/components/staff/StaffLayout";
 import { logActivity } from "@/lib/activity-logger";
+import { archiveAndDelete, notifyCeo } from "@/lib/recycle-bin";
 
 const CATEGORIES = ["Network", "Server", "Software", "Hardware", "General"];
 const PRIORITIES = ["low", "medium", "high", "critical"];
