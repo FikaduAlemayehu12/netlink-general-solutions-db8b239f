@@ -90,6 +90,7 @@ const App = () => (
             <Route path="/staff/settings" element={<StaffGuard><ProfilePage /></StaffGuard>} />
             <Route path="/staff/admin/users" element={<StaffGuard><AdminUsers /></StaffGuard>} />
             <Route path="/staff/activity-log" element={<StaffGuard><ActivityLogPage /></StaffGuard>} />
+            <Route path="/staff/recycle-bin" element={<StaffGuard><RecycleBinPage /></StaffGuard>} />
 
             {/* Legacy routes */}
             <Route path="/admin/users" element={<StaffGuard><AdminUsers /></StaffGuard>} />
