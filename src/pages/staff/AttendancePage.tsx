@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Clock, LogIn, LogOut, Calendar, Timer, PlaneTakeoff, CheckCircle, X, Plus, Users, Download, AlertTriangle } from "lucide-react";
+import { Clock, LogIn, LogOut, Calendar, Timer, PlaneTakeoff, CheckCircle, X, Plus, Users, Download, AlertTriangle, Paperclip, Edit2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
