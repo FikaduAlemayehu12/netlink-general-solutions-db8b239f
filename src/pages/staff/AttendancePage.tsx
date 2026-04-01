@@ -575,7 +575,7 @@ export default function AttendancePage() {
                         </CardContent>
                       </Card>
                     </div>
-                  )
+                  )}
                   {leaveRequests.length === 0 && <p className="text-center py-6 text-muted-foreground text-sm">No leave requests</p>}
                 </div>
               </CardContent>
