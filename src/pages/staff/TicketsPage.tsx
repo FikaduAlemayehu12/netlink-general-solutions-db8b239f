@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import StaffLayout from "@/components/staff/StaffLayout";
 import { logActivity } from "@/lib/activity-logger";
+import { archiveAndDelete, notifyCeo } from "@/lib/recycle-bin";
 
 const CATEGORIES = ["Network", "Server", "Software", "Hardware", "General"];
 const PRIORITIES = ["low", "medium", "high", "critical"];
@@ -164,6 +165,7 @@ export default function TicketsPage() {
       }
     }
     await logActivity("create", "tickets", data?.id, "support_ticket", { title: newTicket.title });
+    await notifyCeo("Created", "Tickets", `New ticket: ${newTicket.title}`, user.id, data?.id);
     setNewTicket({ title: "", description: "", category: "General", priority: "medium", due_date: undefined });
     setAttachmentUrls([]);
     setSelectedAssignees([]);
@@ -183,12 +185,16 @@ export default function TicketsPage() {
     loadTickets();
   };
 
-  // Delete ticket
+  // Delete ticket (with recycle bin)
   const deleteTicket = async (ticketId: string) => {
-    await supabase.from("support_tickets").delete().eq("id", ticketId);
-    await logActivity("delete", "tickets", ticketId, "support_ticket");
+    if (!user) return;
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (ticket) {
+      await archiveAndDelete("support_tickets", ticketId, ticket, user.id);
+      await logActivity("delete", "tickets", ticketId, "support_ticket", { title: ticket.title });
+    }
     if (selectedTicket?.id === ticketId) setSelectedTicket(null);
-    toast({ title: "Ticket deleted" });
+    toast({ title: "Ticket moved to recycle bin" });
     loadTickets();
   };
 
@@ -244,7 +250,11 @@ export default function TicketsPage() {
   };
 
   const deleteComment = async (commentId: string) => {
-    await supabase.from("ticket_comments").delete().eq("id", commentId);
+    if (!user) return;
+    const comment = comments.find(c => c.id === commentId);
+    if (comment) {
+      await archiveAndDelete("ticket_comments", commentId, comment, user.id);
+    }
     loadComments(selectedTicket.id);
   };
 

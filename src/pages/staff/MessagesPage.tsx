@@ -18,6 +18,8 @@ import {
 import StaffLayout from "@/components/staff/StaffLayout";
 import VideoCall from "@/components/staff/VideoCall";
 import { EMOJI_LIST } from "@/lib/emoji-constants";
+import { logActivity } from "@/lib/activity-logger";
+import { archiveAndDelete } from "@/lib/recycle-bin";
 
 interface Profile {
   user_id: string;
@@ -243,6 +245,7 @@ export default function MessagesPage() {
     });
     setInput("");
     setSending(false);
+    await logActivity("create", "messages", undefined, "direct_message", { to: selectedPartner });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -346,8 +349,12 @@ export default function MessagesPage() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteMessageId) return;
-    await supabase.from("direct_messages").delete().eq("id", deleteMessageId);
+    if (!deleteMessageId || !user) return;
+    const msg = messages.find(m => m.id === deleteMessageId);
+    if (msg) {
+      await archiveAndDelete("direct_messages", deleteMessageId, msg, user.id);
+      await logActivity("delete", "messages", deleteMessageId, "direct_message");
+    }
     setMessages((prev) => prev.filter((m) => m.id !== deleteMessageId));
     setDeleteMessageId(null);
     loadConversations();

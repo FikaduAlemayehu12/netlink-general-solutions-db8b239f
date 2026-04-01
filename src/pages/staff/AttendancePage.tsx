@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Clock, LogIn, LogOut, Calendar, Timer, PlaneTakeoff, CheckCircle, X, Plus, Users, Download, AlertTriangle } from "lucide-react";
+import { Clock, LogIn, LogOut, Calendar, Timer, PlaneTakeoff, CheckCircle, X, Plus, Users, Download, AlertTriangle, Paperclip, Edit2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,9 @@ import ExecutiveAttendanceView from "@/components/staff/ExecutiveAttendanceView"
 import LiveAttendanceIndicators from "@/components/staff/LiveAttendanceIndicators";
 import { buildStaffSummaries, exportCSV, exportPDF } from "@/lib/attendance-export";
 import { isEthiopianHoliday, getExpectedHours, getUpcomingHolidays } from "@/lib/ethiopian-holidays";
+import { logActivity } from "@/lib/activity-logger";
+import { archiveAndDelete, notifyCeo } from "@/lib/recycle-bin";
+import { toast } from "@/hooks/use-toast";
 
 const LEAVE_TYPES = ["annual", "sick", "personal", "maternity", "paternity", "unpaid"];
 
@@ -57,7 +60,7 @@ function calculateRegularHours(clockIn: Date, clockOut: Date): number {
 }
 
 export default function AttendancePage() {
-  const { user, isExecutive } = useAuth();
+  const { user, isExecutive, isCeo } = useAuth();
   const [activeTab, setActiveTab] = useState<"attendance" | "leave" | "executive">("attendance");
   const [todayRecords, setTodayRecords] = useState<any[]>([]);
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
@@ -66,6 +69,10 @@ export default function AttendancePage() {
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newLeave, setNewLeave] = useState({ leave_type: "annual", start_date: "", end_date: "", reason: "" });
+  const [leaveAttachments, setLeaveAttachments] = useState<string[]>([]);
+  const [uploadingLeaveFiles, setUploadingLeaveFiles] = useState(false);
+  const [editingLeave, setEditingLeave] = useState<any>(null);
+  const leaveFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadProfiles();
@@ -155,17 +162,68 @@ export default function AttendancePage() {
     loadAttendance();
   };
 
+  const handleLeaveFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || !user) return;
+    setUploadingLeaveFiles(true);
+    const urls: string[] = [...leaveAttachments];
+    for (const file of Array.from(files)) {
+      if (file.size > 10 * 1024 * 1024) continue;
+      const path = `${user.id}/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from("leave-attachments").upload(path, file);
+      if (!error) {
+        const { data: pub } = supabase.storage.from("leave-attachments").getPublicUrl(path);
+        urls.push(pub.publicUrl);
+      }
+    }
+    setLeaveAttachments(urls);
+    setUploadingLeaveFiles(false);
+    if (leaveFileRef.current) leaveFileRef.current.value = "";
+  };
+
   const submitLeave = async () => {
-    if (!newLeave.start_date || !newLeave.end_date || !user) return;
-    await supabase.from("leave_requests").insert({
+    if (!newLeave.start_date || !newLeave.end_date || !user) {
+      toast({ title: "Start and end dates are required", variant: "destructive" });
+      return;
+    }
+    const { data } = await supabase.from("leave_requests").insert({
       user_id: user.id,
       leave_type: newLeave.leave_type,
       start_date: newLeave.start_date,
       end_date: newLeave.end_date,
       reason: newLeave.reason,
-    });
+      attachment_urls: leaveAttachments,
+    } as any).select().single();
+    await logActivity("create", "leave", data?.id, "leave_request", { type: newLeave.leave_type });
+    await notifyCeo("Submitted", "Leave", `${newLeave.leave_type} leave request`, user.id, data?.id);
     setNewLeave({ leave_type: "annual", start_date: "", end_date: "", reason: "" });
+    setLeaveAttachments([]);
     setShowLeaveForm(false);
+    loadLeaves();
+  };
+
+  const deleteLeave = async (leaveId: string) => {
+    if (!user) return;
+    const leave = leaveRequests.find(l => l.id === leaveId);
+    if (leave) {
+      await archiveAndDelete("leave_requests", leaveId, leave, user.id);
+      await logActivity("delete", "leave", leaveId, "leave_request");
+    }
+    toast({ title: "Leave request moved to recycle bin" });
+    loadLeaves();
+  };
+
+  const saveEditLeave = async () => {
+    if (!editingLeave || !user) return;
+    await supabase.from("leave_requests").update({
+      leave_type: editingLeave.leave_type,
+      start_date: editingLeave.start_date,
+      end_date: editingLeave.end_date,
+      reason: editingLeave.reason,
+    }).eq("id", editingLeave.id);
+    await logActivity("update", "leave", editingLeave.id, "leave_request");
+    setEditingLeave(null);
+    toast({ title: "Leave request updated" });
     loadLeaves();
   };
 
@@ -176,6 +234,16 @@ export default function AttendancePage() {
       approved_by: user.id,
       approved_at: new Date().toISOString(),
     }).eq("id", leaveId);
+    await logActivity(approved ? "approve" : "reject", "leave", leaveId, "leave_request");
+    const leave = leaveRequests.find(l => l.id === leaveId);
+    if (leave) {
+      await supabase.from("notifications").insert({
+        user_id: leave.user_id, type: "leave",
+        title: `Leave ${approved ? "Approved" : "Rejected"}`,
+        message: `Your ${leave.leave_type} leave has been ${approved ? "approved" : "rejected"}`,
+        related_id: leaveId,
+      });
+    }
     loadLeaves();
   };
 
@@ -406,9 +474,30 @@ export default function AttendancePage() {
                     <label className="text-sm font-medium font-heading">Reason</label>
                     <Textarea rows={3} placeholder="Reason for leave..." value={newLeave.reason} onChange={(e) => setNewLeave((p) => ({ ...p, reason: e.target.value }))} />
                   </div>
+                  {/* Attachments */}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium font-heading flex items-center gap-1.5">
+                      <Paperclip className="w-4 h-4" />Attachments (medical certificates, etc.)
+                    </label>
+                    <input ref={leaveFileRef} type="file" multiple className="hidden" onChange={handleLeaveFileUpload} />
+                    <Button type="button" variant="outline" size="sm" onClick={() => leaveFileRef.current?.click()} disabled={uploadingLeaveFiles}>
+                      {uploadingLeaveFiles ? "Uploading..." : "Choose Files"}
+                    </Button>
+                    {leaveAttachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {leaveAttachments.map((url, i) => (
+                          <div key={i} className="flex items-center gap-1.5 bg-muted rounded px-2 py-1 text-xs">
+                            <Paperclip className="w-3 h-3" />
+                            <span className="max-w-[120px] truncate">{decodeURIComponent(url.split("/").pop()?.split("?")[0] || "file").replace(/^\d+_/, "")}</span>
+                            <button onClick={() => setLeaveAttachments(prev => prev.filter((_, idx) => idx !== i))} className="text-destructive hover:text-destructive/80"><X className="w-3 h-3" /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex gap-3">
-                    <Button variant="outline" onClick={() => setShowLeaveForm(false)} className="flex-1">Cancel</Button>
-                    <Button onClick={submitLeave} className="flex-1 gradient-brand text-primary-foreground font-heading">Submit Request</Button>
+                    <Button variant="outline" onClick={() => { setShowLeaveForm(false); setLeaveAttachments([]); }} className="flex-1">Cancel</Button>
+                    <Button onClick={submitLeave} disabled={uploadingLeaveFiles} className="flex-1 gradient-brand text-primary-foreground font-heading">Submit Request</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -420,27 +509,73 @@ export default function AttendancePage() {
               <CardContent>
                 <div className="space-y-3">
                   {leaveRequests.map((lr) => (
-                    <div key={lr.id} className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-                      <PlaneTakeoff className="w-5 h-5 text-primary flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {isExecutive && <span className="text-sm font-semibold text-foreground">{profiles[lr.user_id]?.full_name}</span>}
-                          <Badge variant="secondary">{lr.leave_type}</Badge>
-                          <Badge className={STATUS_COLORS[lr.status]}>{lr.status}</Badge>
+                    <div key={lr.id} className="p-3 bg-muted/50 rounded-lg space-y-2">
+                      <div className="flex items-center gap-4">
+                        <PlaneTakeoff className="w-5 h-5 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isExecutive && <span className="text-sm font-semibold text-foreground">{profiles[lr.user_id]?.full_name}</span>}
+                            <Badge variant="secondary">{lr.leave_type}</Badge>
+                            <Badge className={STATUS_COLORS[lr.status]}>{lr.status}</Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {new Date(lr.start_date).toLocaleDateString()} → {new Date(lr.end_date).toLocaleDateString()}
+                            {lr.reason && ` · ${lr.reason}`}
+                          </div>
+                          {lr.attachment_urls && lr.attachment_urls.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {lr.attachment_urls.map((url: string, i: number) => (
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                  className="flex items-center gap-1 px-2 py-0.5 bg-muted rounded text-xs text-primary hover:bg-primary/10">
+                                  <Download className="w-3 h-3" />{decodeURIComponent(url.split("/").pop()?.split("?")[0] || "file").replace(/^\d+_/, "").slice(0, 20)}
+                                </a>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {new Date(lr.start_date).toLocaleDateString()} → {new Date(lr.end_date).toLocaleDateString()}
-                          {lr.reason && ` · ${lr.reason}`}
+                        <div className="flex gap-1.5 items-center flex-shrink-0">
+                          {lr.user_id === user?.id && lr.status === "pending" && (
+                            <>
+                              <button onClick={() => setEditingLeave({ ...lr })} className="text-muted-foreground hover:text-foreground p-1"><Edit2 className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => deleteLeave(lr.id)} className="text-destructive hover:text-destructive/80 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </>
+                          )}
+                          {(isCeo || isExecutive) && lr.user_id !== user?.id && (
+                            <button onClick={() => deleteLeave(lr.id)} className="text-destructive hover:text-destructive/80 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                          )}
+                          {isExecutive && lr.status === "pending" && (
+                            <>
+                              <Button size="sm" variant="outline" onClick={() => approveLeave(lr.id, true)} className="text-accent">Approve</Button>
+                              <Button size="sm" variant="outline" onClick={() => approveLeave(lr.id, false)} className="text-destructive">Reject</Button>
+                            </>
+                          )}
                         </div>
                       </div>
-                      {isExecutive && lr.status === "pending" && (
-                        <div className="flex gap-1.5">
-                          <Button size="sm" variant="outline" onClick={() => approveLeave(lr.id, true)} className="text-accent">Approve</Button>
-                          <Button size="sm" variant="outline" onClick={() => approveLeave(lr.id, false)} className="text-destructive">Reject</Button>
-                        </div>
-                      )}
                     </div>
                   ))}
+                  {/* Edit Leave Modal */}
+                  {editingLeave && (
+                    <div className="fixed inset-0 bg-background/80 z-50 flex items-center justify-center p-4">
+                      <Card className="w-full max-w-md">
+                        <CardHeader><CardTitle className="font-heading">Edit Leave Request</CardTitle></CardHeader>
+                        <CardContent className="space-y-3">
+                          <select value={editingLeave.leave_type} onChange={(e) => setEditingLeave({ ...editingLeave, leave_type: e.target.value })}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                            {LEAVE_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                          </select>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Input type="date" value={editingLeave.start_date} onChange={(e) => setEditingLeave({ ...editingLeave, start_date: e.target.value })} />
+                            <Input type="date" value={editingLeave.end_date} onChange={(e) => setEditingLeave({ ...editingLeave, end_date: e.target.value })} />
+                          </div>
+                          <Textarea value={editingLeave.reason || ""} onChange={(e) => setEditingLeave({ ...editingLeave, reason: e.target.value })} rows={3} />
+                          <div className="flex gap-3">
+                            <Button variant="outline" onClick={() => setEditingLeave(null)} className="flex-1">Cancel</Button>
+                            <Button onClick={saveEditLeave} className="flex-1 gradient-brand text-primary-foreground">Save</Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
                   {leaveRequests.length === 0 && <p className="text-center py-6 text-muted-foreground text-sm">No leave requests</p>}
                 </div>
               </CardContent>
