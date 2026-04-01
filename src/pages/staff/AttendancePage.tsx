@@ -69,6 +69,10 @@ export default function AttendancePage() {
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newLeave, setNewLeave] = useState({ leave_type: "annual", start_date: "", end_date: "", reason: "" });
+  const [leaveAttachments, setLeaveAttachments] = useState<string[]>([]);
+  const [uploadingLeaveFiles, setUploadingLeaveFiles] = useState(false);
+  const [editingLeave, setEditingLeave] = useState<any>(null);
+  const leaveFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadProfiles();
