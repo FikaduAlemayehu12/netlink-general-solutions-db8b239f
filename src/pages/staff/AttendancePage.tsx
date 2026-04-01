@@ -60,7 +60,7 @@ function calculateRegularHours(clockIn: Date, clockOut: Date): number {
 }
 
 export default function AttendancePage() {
-  const { user, isExecutive } = useAuth();
+  const { user, isExecutive, isCeo } = useAuth();
   const [activeTab, setActiveTab] = useState<"attendance" | "leave" | "executive">("attendance");
   const [todayRecords, setTodayRecords] = useState<any[]>([]);
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
