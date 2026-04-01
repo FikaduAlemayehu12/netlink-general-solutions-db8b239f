@@ -509,27 +509,73 @@ export default function AttendancePage() {
               <CardContent>
                 <div className="space-y-3">
                   {leaveRequests.map((lr) => (
-                    <div key={lr.id} className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-                      <PlaneTakeoff className="w-5 h-5 text-primary flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {isExecutive && <span className="text-sm font-semibold text-foreground">{profiles[lr.user_id]?.full_name}</span>}
-                          <Badge variant="secondary">{lr.leave_type}</Badge>
-                          <Badge className={STATUS_COLORS[lr.status]}>{lr.status}</Badge>
+                    <div key={lr.id} className="p-3 bg-muted/50 rounded-lg space-y-2">
+                      <div className="flex items-center gap-4">
+                        <PlaneTakeoff className="w-5 h-5 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isExecutive && <span className="text-sm font-semibold text-foreground">{profiles[lr.user_id]?.full_name}</span>}
+                            <Badge variant="secondary">{lr.leave_type}</Badge>
+                            <Badge className={STATUS_COLORS[lr.status]}>{lr.status}</Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {new Date(lr.start_date).toLocaleDateString()} → {new Date(lr.end_date).toLocaleDateString()}
+                            {lr.reason && ` · ${lr.reason}`}
+                          </div>
+                          {lr.attachment_urls && lr.attachment_urls.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {lr.attachment_urls.map((url: string, i: number) => (
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                  className="flex items-center gap-1 px-2 py-0.5 bg-muted rounded text-xs text-primary hover:bg-primary/10">
+                                  <Download className="w-3 h-3" />{decodeURIComponent(url.split("/").pop()?.split("?")[0] || "file").replace(/^\d+_/, "").slice(0, 20)}
+                                </a>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {new Date(lr.start_date).toLocaleDateString()} → {new Date(lr.end_date).toLocaleDateString()}
-                          {lr.reason && ` · ${lr.reason}`}
+                        <div className="flex gap-1.5 items-center flex-shrink-0">
+                          {lr.user_id === user?.id && lr.status === "pending" && (
+                            <>
+                              <button onClick={() => setEditingLeave({ ...lr })} className="text-muted-foreground hover:text-foreground p-1"><Edit2 className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => deleteLeave(lr.id)} className="text-destructive hover:text-destructive/80 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </>
+                          )}
+                          {(isCeo || isExecutive) && lr.user_id !== user?.id && (
+                            <button onClick={() => deleteLeave(lr.id)} className="text-destructive hover:text-destructive/80 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                          )}
+                          {isExecutive && lr.status === "pending" && (
+                            <>
+                              <Button size="sm" variant="outline" onClick={() => approveLeave(lr.id, true)} className="text-accent">Approve</Button>
+                              <Button size="sm" variant="outline" onClick={() => approveLeave(lr.id, false)} className="text-destructive">Reject</Button>
+                            </>
+                          )}
                         </div>
                       </div>
-                      {isExecutive && lr.status === "pending" && (
-                        <div className="flex gap-1.5">
-                          <Button size="sm" variant="outline" onClick={() => approveLeave(lr.id, true)} className="text-accent">Approve</Button>
-                          <Button size="sm" variant="outline" onClick={() => approveLeave(lr.id, false)} className="text-destructive">Reject</Button>
-                        </div>
-                      )}
                     </div>
                   ))}
+                  {/* Edit Leave Modal */}
+                  {editingLeave && (
+                    <div className="fixed inset-0 bg-background/80 z-50 flex items-center justify-center p-4">
+                      <Card className="w-full max-w-md">
+                        <CardHeader><CardTitle className="font-heading">Edit Leave Request</CardTitle></CardHeader>
+                        <CardContent className="space-y-3">
+                          <select value={editingLeave.leave_type} onChange={(e) => setEditingLeave({ ...editingLeave, leave_type: e.target.value })}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                            {LEAVE_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                          </select>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Input type="date" value={editingLeave.start_date} onChange={(e) => setEditingLeave({ ...editingLeave, start_date: e.target.value })} />
+                            <Input type="date" value={editingLeave.end_date} onChange={(e) => setEditingLeave({ ...editingLeave, end_date: e.target.value })} />
+                          </div>
+                          <Textarea value={editingLeave.reason || ""} onChange={(e) => setEditingLeave({ ...editingLeave, reason: e.target.value })} rows={3} />
+                          <div className="flex gap-3">
+                            <Button variant="outline" onClick={() => setEditingLeave(null)} className="flex-1">Cancel</Button>
+                            <Button onClick={saveEditLeave} className="flex-1 gradient-brand text-primary-foreground">Save</Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )
                   {leaveRequests.length === 0 && <p className="text-center py-6 text-muted-foreground text-sm">No leave requests</p>}
                 </div>
               </CardContent>
