@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, FolderKanban, Users, Circle, Clock, Check, ChevronRight, MessageSquare, BarChart3, CalendarIcon, Target, AlertTriangle, CheckCircle, Flag, Send, Trash2, Paperclip, File, Archive, FileText, ClipboardList, Download, Image } from "lucide-react";
+import { Plus, FolderKanban, Users, Circle, Clock, Check, ChevronRight, MessageSquare, BarChart3, CalendarIcon, Target, AlertTriangle, CheckCircle, Flag, Send, Trash2, Paperclip, File, Archive, FileText, ClipboardList, Download, Image, Pencil, X } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,11 +13,17 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import StaffLayout from "@/components/staff/StaffLayout";
 import TeamChat from "@/components/staff/TeamChat";
 import ProjectFileUpload from "@/components/staff/ProjectFileUpload";
+import { logActivity } from "@/lib/activity-logger";
+import { archiveAndDelete, notifyCeo } from "@/lib/recycle-bin";
 
 const STATUS_CONFIG = {
   todo: { label: "To Do", icon: Circle, color: "text-muted-foreground" },
@@ -63,6 +69,19 @@ export default function ProjectsPage() {
   const [activeTab, setActiveTab] = useState("tasks");
   const [viewMode, setViewMode] = useState<"active" | "completed">("active");
 
+  // Edit states
+  const [editingProject, setEditingProject] = useState(false);
+  const [editProjectForm, setEditProjectForm] = useState({ name: "", description: "", member_ids: [] as string[], start_date: undefined as Date | undefined, end_date: undefined as Date | undefined });
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskForm, setEditTaskForm] = useState({ title: "", description: "", assigned_to: "", status: "todo" });
+  const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null);
+  const [editUpdateForm, setEditUpdateForm] = useState({ content: "", update_type: "daily" });
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentContent, setEditCommentContent] = useState("");
+
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; data: any } | null>(null);
+
   useEffect(() => {
     loadGroups();
     loadProfiles();
@@ -95,7 +114,7 @@ export default function ProjectsPage() {
   };
 
   const loadTasks = async (groupId: string) => {
-    const { data } = await supabase.from("project_tasks").select("*, assignee:profiles!project_tasks_assigned_to_fkey(full_name), creator:profiles!project_tasks_created_by_fkey(full_name)").eq("group_id", groupId).order("created_at");
+    const { data } = await supabase.from("project_tasks").select("*").eq("group_id", groupId).order("created_at");
     setTasks(data || []);
   };
 
@@ -122,6 +141,7 @@ export default function ProjectsPage() {
     loadUpdates(group.id);
     setShowChat(false);
     setActiveTab("tasks");
+    setEditingProject(false);
   };
 
   const createGroup = async () => {
@@ -141,7 +161,49 @@ export default function ProjectsPage() {
     setGroupForm({ name: "", description: "", member_ids: [], start_date: undefined, end_date: undefined, attachments: [] });
     setShowNewGroup(false);
     loadGroups();
+    await logActivity("create", "projects", undefined, "project", { name: groupForm.name });
+    await notifyCeo("Created", "Projects", `Project "${groupForm.name}" was created`, authUser.id);
     toast.success("Project created successfully");
+  };
+
+  // Edit project
+  const startEditProject = () => {
+    if (!selectedGroup) return;
+    setEditProjectForm({
+      name: selectedGroup.name,
+      description: selectedGroup.description || "",
+      member_ids: selectedGroup.member_ids || [],
+      start_date: selectedGroup.start_date ? new Date(selectedGroup.start_date) : undefined,
+      end_date: selectedGroup.end_date ? new Date(selectedGroup.end_date) : undefined,
+    });
+    setEditingProject(true);
+  };
+
+  const saveEditProject = async () => {
+    if (!selectedGroup || !editProjectForm.name.trim()) return;
+    await supabase.from("project_groups").update({
+      name: editProjectForm.name,
+      description: editProjectForm.description,
+      member_ids: editProjectForm.member_ids,
+      start_date: editProjectForm.start_date ? format(editProjectForm.start_date, "yyyy-MM-dd") : null,
+      end_date: editProjectForm.end_date ? format(editProjectForm.end_date, "yyyy-MM-dd") : null,
+    }).eq("id", selectedGroup.id);
+    setSelectedGroup({ ...selectedGroup, ...editProjectForm, start_date: editProjectForm.start_date ? format(editProjectForm.start_date, "yyyy-MM-dd") : null, end_date: editProjectForm.end_date ? format(editProjectForm.end_date, "yyyy-MM-dd") : null });
+    setEditingProject(false);
+    loadGroups();
+    await logActivity("update", "projects", selectedGroup.id, "project", { name: editProjectForm.name });
+    await notifyCeo("Updated", "Projects", `Project "${editProjectForm.name}" was updated`, user?.id || "");
+    toast.success("Project updated");
+  };
+
+  // Delete project
+  const deleteProject = async () => {
+    if (!selectedGroup || !user) return;
+    await archiveAndDelete("project_groups", selectedGroup.id, selectedGroup, user.id);
+    await logActivity("delete", "projects", selectedGroup.id, "project", { name: selectedGroup.name });
+    setSelectedGroup(null);
+    loadGroups();
+    toast.success("Project moved to recycle bin");
   };
 
   const createTask = async () => {
@@ -169,12 +231,43 @@ export default function ProjectsPage() {
     setTaskForm({ title: "", description: "", assigned_to: "", status: "todo", attachments: [] });
     setShowNewTask(false);
     loadTasks(selectedGroup.id);
+    await logActivity("create", "projects", selectedGroup.id, "project_task", { title: taskForm.title });
     toast.success("Task added");
   };
 
   const updateTaskStatus = async (taskId: string, status: string) => {
     await supabase.from("project_tasks").update({ status }).eq("id", taskId);
     if (selectedGroup) loadTasks(selectedGroup.id);
+    await logActivity("status_change", "projects", taskId, "project_task", { status });
+  };
+
+  // Edit task
+  const startEditTask = (task: any) => {
+    setEditingTaskId(task.id);
+    setEditTaskForm({ title: task.title, description: task.description || "", assigned_to: task.assigned_to || "", status: task.status });
+  };
+
+  const saveEditTask = async () => {
+    if (!editingTaskId || !editTaskForm.title.trim()) return;
+    await supabase.from("project_tasks").update({
+      title: editTaskForm.title,
+      description: editTaskForm.description,
+      assigned_to: editTaskForm.assigned_to || null,
+      status: editTaskForm.status,
+    }).eq("id", editingTaskId);
+    setEditingTaskId(null);
+    if (selectedGroup) loadTasks(selectedGroup.id);
+    await logActivity("update", "projects", editingTaskId, "project_task", { title: editTaskForm.title });
+    toast.success("Task updated");
+  };
+
+  // Delete task
+  const deleteTask = async (task: any) => {
+    if (!user) return;
+    await archiveAndDelete("project_tasks", task.id, task, user.id);
+    await logActivity("delete", "projects", task.id, "project_task", { title: task.title });
+    if (selectedGroup) loadTasks(selectedGroup.id);
+    toast.success("Task deleted");
   };
 
   const addMilestone = async () => {
@@ -187,6 +280,7 @@ export default function ProjectsPage() {
     setMilestoneForm({ target_percentage: 25, target_date: undefined });
     setShowAddMilestone(false);
     loadMilestones(selectedGroup.id);
+    await logActivity("create", "projects", selectedGroup.id, "project_milestone", { target: milestoneForm.target_percentage });
   };
 
   const submitReview = async (milestoneId: string) => {
@@ -215,6 +309,7 @@ export default function ProjectsPage() {
     setShowReview(null);
     setReviewForm({ milestone_id: "", status: "on_track", notes: "", action_items: "" });
     loadMilestones(selectedGroup!.id);
+    await logActivity("update", "projects", milestoneId, "project_milestone", { status: reviewForm.status });
   };
 
   const addComment = async () => {
@@ -226,11 +321,30 @@ export default function ProjectsPage() {
     });
     setNewComment("");
     loadComments(selectedGroup.id);
+    await logActivity("comment", "projects", selectedGroup.id, "project_comment");
   };
 
-  const deleteComment = async (commentId: string) => {
-    await supabase.from("project_comments").delete().eq("id", commentId);
+  const deleteComment = async (comment: any) => {
+    if (!user) return;
+    await archiveAndDelete("project_comments", comment.id, comment, user.id);
+    await logActivity("delete", "projects", comment.id, "project_comment");
     if (selectedGroup) loadComments(selectedGroup.id);
+    toast.success("Comment deleted");
+  };
+
+  // Edit comment
+  const startEditComment = (comment: any) => {
+    setEditingCommentId(comment.id);
+    setEditCommentContent(comment.content);
+  };
+
+  const saveEditComment = async () => {
+    if (!editingCommentId || !editCommentContent.trim()) return;
+    // project_comments doesn't have UPDATE RLS — use workaround: only author can via insert pattern
+    // Actually project_comments table doesn't have update policy, so let's skip update for comments
+    // We'll just re-insert — but better to just close edit
+    toast.error("Comment editing is not supported. Please delete and re-post.");
+    setEditingCommentId(null);
   };
 
   const submitUpdate = async () => {
@@ -246,7 +360,6 @@ export default function ProjectsPage() {
       toast.error("Failed to submit update");
       return;
     }
-    // Notify other members
     if (selectedGroup.member_ids) {
       const notifications = selectedGroup.member_ids
         .filter((id: string) => id !== user.id)
@@ -262,7 +375,34 @@ export default function ProjectsPage() {
     setUpdateForm({ content: "", update_type: "daily", attachments: [] });
     setShowNewUpdate(false);
     loadUpdates(selectedGroup.id);
+    await logActivity("create", "projects", selectedGroup.id, "project_update", { type: updateForm.update_type });
     toast.success("Progress update submitted");
+  };
+
+  // Edit update
+  const startEditUpdate = (u: any) => {
+    setEditingUpdateId(u.id);
+    setEditUpdateForm({ content: u.content, update_type: u.update_type });
+  };
+
+  const saveEditUpdate = async () => {
+    if (!editingUpdateId || !editUpdateForm.content.trim()) return;
+    await supabase.from("project_updates").update({
+      content: editUpdateForm.content,
+      update_type: editUpdateForm.update_type,
+    }).eq("id", editingUpdateId);
+    setEditingUpdateId(null);
+    if (selectedGroup) loadUpdates(selectedGroup.id);
+    await logActivity("update", "projects", editingUpdateId, "project_update");
+    toast.success("Update edited");
+  };
+
+  const deleteUpdate = async (u: any) => {
+    if (!user) return;
+    await archiveAndDelete("project_updates", u.id, u, user.id);
+    await logActivity("delete", "projects", u.id, "project_update");
+    if (selectedGroup) loadUpdates(selectedGroup.id);
+    toast.success("Update deleted");
   };
 
   const completeProject = async () => {
@@ -276,7 +416,6 @@ export default function ProjectsPage() {
       toast.error("Failed to complete project");
       return;
     }
-    // Notify members
     if (selectedGroup.member_ids) {
       const notifications = selectedGroup.member_ids
         .filter((id: string) => id !== user.id)
@@ -293,12 +432,20 @@ export default function ProjectsPage() {
     setCompleteForm({ attachments: [] });
     setSelectedGroup({ ...selectedGroup, status: "completed", completed_at: new Date().toISOString(), final_attachment_urls: completeForm.attachments });
     loadGroups();
+    await logActivity("status_change", "projects", selectedGroup.id, "project", { status: "completed" });
+    await notifyCeo("Completed", "Projects", `Project "${selectedGroup.name}" was completed`, user.id);
     toast.success("Project marked as completed!");
   };
 
-  const deleteUpdate = async (updateId: string) => {
-    await supabase.from("project_updates").delete().eq("id", updateId);
-    if (selectedGroup) loadUpdates(selectedGroup.id);
+  // Confirm delete handler
+  const confirmDeleteTarget = async () => {
+    if (!deleteTarget) return;
+    const { type, id, data } = deleteTarget;
+    if (type === "project") await deleteProject();
+    else if (type === "task") await deleteTask(data);
+    else if (type === "update") await deleteUpdate(data);
+    else if (type === "comment") await deleteComment(data);
+    setDeleteTarget(null);
   };
 
   const activeGroups = groups.filter(g => g.status !== "completed");
@@ -306,6 +453,9 @@ export default function ProjectsPage() {
   const displayedGroups = viewMode === "active" ? activeGroups : completedGroups;
   const isMember = selectedGroup?.member_ids?.includes(user?.id) || isCeo || isExecutive;
   const isCompleted = selectedGroup?.status === "completed";
+  const canEditProject = selectedGroup && (selectedGroup.created_by === user?.id || isCeo || isExecutive);
+
+  const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "Unknown";
 
   return (
     <StaffLayout>
@@ -323,7 +473,6 @@ export default function ProjectsPage() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Groups List */}
           <div className="lg:col-span-1 space-y-3">
-            {/* Active / Completed toggle */}
             <div className="flex gap-2 mb-2">
               <Button size="sm" variant={viewMode === "active" ? "default" : "outline"} onClick={() => { setViewMode("active"); setSelectedGroup(null); }} className="flex-1 gap-1 text-xs">
                 <FolderKanban className="w-3 h-3" />Active ({activeGroups.length})
@@ -377,7 +526,6 @@ export default function ProjectsPage() {
                           ))}
                         </div>
                       </div>
-                      {/* Optional file attachments */}
                       <ProjectFileUpload
                         bucket="project-attachments"
                         folder="project-requirements"
@@ -433,30 +581,91 @@ export default function ProjectsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-lg font-heading font-bold text-foreground">{selectedGroup.name}</h2>
-                      {isCompleted && <Badge className="bg-green-600 text-primary-foreground border-0 text-[10px]">Completed</Badge>}
+                {/* Project Header */}
+                {editingProject ? (
+                  <Card className="border-primary/30">
+                    <CardContent className="p-4 space-y-3">
+                      <Input placeholder="Project name" value={editProjectForm.name} onChange={(e) => setEditProjectForm(f => ({ ...f, name: e.target.value }))} />
+                      <Input placeholder="Description" value={editProjectForm.description} onChange={(e) => setEditProjectForm(f => ({ ...f, description: e.target.value }))} />
+                      <div className="grid grid-cols-2 gap-2">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("justify-start text-left text-xs", !editProjectForm.start_date && "text-muted-foreground")}>
+                              <CalendarIcon className="w-3 h-3 mr-1" />
+                              {editProjectForm.start_date ? format(editProjectForm.start_date, "MMM d, yyyy") : "Start date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="single" selected={editProjectForm.start_date} onSelect={(d) => setEditProjectForm(f => ({ ...f, start_date: d }))} className={cn("p-3 pointer-events-auto")} />
+                          </PopoverContent>
+                        </Popover>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("justify-start text-left text-xs", !editProjectForm.end_date && "text-muted-foreground")}>
+                              <CalendarIcon className="w-3 h-3 mr-1" />
+                              {editProjectForm.end_date ? format(editProjectForm.end_date, "MMM d, yyyy") : "End date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="single" selected={editProjectForm.end_date} onSelect={(d) => setEditProjectForm(f => ({ ...f, end_date: d }))} className={cn("p-3 pointer-events-auto")} />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1.5">Members:</p>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {profiles.map((p) => (
+                            <label key={p.user_id} className="flex items-center gap-2 cursor-pointer hover:bg-muted rounded p-1">
+                              <input type="checkbox" checked={editProjectForm.member_ids.includes(p.user_id)} onChange={(e) => {
+                                setEditProjectForm(f => ({ ...f, member_ids: e.target.checked ? [...f.member_ids, p.user_id] : f.member_ids.filter(id => id !== p.user_id) }));
+                              }} className="rounded" />
+                              <span className="text-sm text-foreground">{p.full_name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setEditingProject(false)} className="flex-1">Cancel</Button>
+                        <Button size="sm" onClick={saveEditProject} className="flex-1 gradient-brand text-primary-foreground font-heading">Save</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-heading font-bold text-foreground">{selectedGroup.name}</h2>
+                        {isCompleted && <Badge className="bg-green-600 text-primary-foreground border-0 text-[10px]">Completed</Badge>}
+                      </div>
+                      {selectedGroup.description && <p className="text-muted-foreground text-sm">{selectedGroup.description}</p>}
+                      <div className="flex gap-3 text-xs text-muted-foreground mt-1">
+                        {selectedGroup.start_date && <span>Start: {format(new Date(selectedGroup.start_date), "MMM d, yyyy")}</span>}
+                        {selectedGroup.end_date && <span>Due: {format(new Date(selectedGroup.end_date), "MMM d, yyyy")}</span>}
+                        {selectedGroup.completed_at && <span className="text-green-600">Completed: {format(new Date(selectedGroup.completed_at), "MMM d, yyyy")}</span>}
+                      </div>
                     </div>
-                    {selectedGroup.description && <p className="text-muted-foreground text-sm">{selectedGroup.description}</p>}
-                    <div className="flex gap-3 text-xs text-muted-foreground mt-1">
-                      {selectedGroup.start_date && <span>Start: {format(new Date(selectedGroup.start_date), "MMM d, yyyy")}</span>}
-                      {selectedGroup.end_date && <span>Due: {format(new Date(selectedGroup.end_date), "MMM d, yyyy")}</span>}
-                      {selectedGroup.completed_at && <span className="text-green-600">Completed: {format(new Date(selectedGroup.completed_at), "MMM d, yyyy")}</span>}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {!isCompleted && isMember && isExecutive && (
-                      <Button onClick={() => setShowComplete(true)} size="sm" variant="outline" className="gap-1.5 text-green-600 border-green-600/30 hover:bg-green-600/10">
-                        <CheckCircle className="w-3.5 h-3.5" />Complete
+                    <div className="flex gap-2">
+                      {canEditProject && !isCompleted && (
+                        <>
+                          <Button onClick={startEditProject} size="sm" variant="outline" className="gap-1.5 text-xs">
+                            <Pencil className="w-3.5 h-3.5" />Edit
+                          </Button>
+                          <Button onClick={() => setDeleteTarget({ type: "project", id: selectedGroup.id, data: selectedGroup })} size="sm" variant="outline" className="gap-1.5 text-xs text-destructive border-destructive/30 hover:bg-destructive/10">
+                            <Trash2 className="w-3.5 h-3.5" />Delete
+                          </Button>
+                        </>
+                      )}
+                      {!isCompleted && isMember && isExecutive && (
+                        <Button onClick={() => setShowComplete(true)} size="sm" variant="outline" className="gap-1.5 text-green-600 border-green-600/30 hover:bg-green-600/10">
+                          <CheckCircle className="w-3.5 h-3.5" />Complete
+                        </Button>
+                      )}
+                      <Button onClick={() => setShowChat(true)} size="sm" variant="outline" className="gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5" />Chat
                       </Button>
-                    )}
-                    <Button onClick={() => setShowChat(true)} size="sm" variant="outline" className="gap-1.5">
-                      <MessageSquare className="w-3.5 h-3.5" />Chat
-                    </Button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Complete Project Modal */}
                 <AnimatePresence>
@@ -465,7 +674,7 @@ export default function ProjectsPage() {
                       <Card className="border-green-600/30">
                         <CardContent className="p-4 space-y-3">
                           <h3 className="font-heading font-bold text-sm text-foreground">Complete Project</h3>
-                          <p className="text-xs text-muted-foreground">Mark this project as completed. Optionally attach final deliverables (screenshots, files).</p>
+                          <p className="text-xs text-muted-foreground">Mark this project as completed. Optionally attach final deliverables.</p>
                           <ProjectFileUpload
                             bucket="project-attachments"
                             folder={`${selectedGroup.id}/final`}
@@ -485,7 +694,7 @@ export default function ProjectsPage() {
                   )}
                 </AnimatePresence>
 
-                {/* Project Attachments (initial files) */}
+                {/* Project Attachments */}
                 {selectedGroup.attachment_urls?.length > 0 && (
                   <Card className="border-primary/20 bg-primary/5">
                     <CardContent className="p-3">
@@ -512,7 +721,7 @@ export default function ProjectsPage() {
                   </Card>
                 )}
 
-                {/* Final deliverables for completed projects */}
+                {/* Final deliverables */}
                 {isCompleted && selectedGroup.final_attachment_urls?.length > 0 && (
                   <Card className="border-green-600/20 bg-green-50/50 dark:bg-green-900/10">
                     <CardContent className="p-3">
@@ -653,6 +862,39 @@ export default function ProjectsPage() {
                       )}
                     </AnimatePresence>
 
+                    {/* Edit Task inline */}
+                    {editingTaskId && (
+                      <Card className="border-primary/30">
+                        <CardContent className="p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-heading font-semibold">Edit Task</span>
+                            <button onClick={() => setEditingTaskId(null)}><X className="w-4 h-4 text-muted-foreground" /></button>
+                          </div>
+                          <Input placeholder="Task title" value={editTaskForm.title} onChange={(e) => setEditTaskForm(f => ({ ...f, title: e.target.value }))} />
+                          <Input placeholder="Description" value={editTaskForm.description} onChange={(e) => setEditTaskForm(f => ({ ...f, description: e.target.value }))} />
+                          <div className="grid grid-cols-2 gap-2">
+                            <select value={editTaskForm.assigned_to} onChange={(e) => setEditTaskForm(f => ({ ...f, assigned_to: e.target.value }))}
+                              className="rounded-md border border-input bg-background px-3 py-2 text-sm">
+                              <option value="">Unassigned</option>
+                              {profiles.filter(p => selectedGroup.member_ids?.includes(p.user_id)).map(p => (
+                                <option key={p.user_id} value={p.user_id}>{p.full_name}</option>
+                              ))}
+                            </select>
+                            <select value={editTaskForm.status} onChange={(e) => setEditTaskForm(f => ({ ...f, status: e.target.value }))}
+                              className="rounded-md border border-input bg-background px-3 py-2 text-sm">
+                              <option value="todo">To Do</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="done">Done</option>
+                            </select>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setEditingTaskId(null)} className="flex-1">Cancel</Button>
+                            <Button size="sm" onClick={saveEditTask} className="flex-1 gradient-brand text-primary-foreground font-heading">Save</Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
                     {/* Kanban Columns */}
                     <div className="grid grid-cols-3 gap-3">
                       {(["todo", "in_progress", "done"] as const).map((status) => {
@@ -666,14 +908,22 @@ export default function ProjectsPage() {
                               <span className="ml-auto text-xs bg-background rounded-full w-5 h-5 flex items-center justify-center font-bold">{columnTasks.length}</span>
                             </div>
                             {columnTasks.map((task) => (
-                              <Card key={task.id} className="shadow-sm">
+                              <Card key={task.id} className="shadow-sm group">
                                 <CardContent className="p-3">
-                                  <div className="font-heading font-semibold text-xs text-foreground">{task.title}</div>
+                                  <div className="flex items-start justify-between">
+                                    <div className="font-heading font-semibold text-xs text-foreground">{task.title}</div>
+                                    {(task.created_by === user?.id || task.assigned_to === user?.id || isCeo || isExecutive) && !isCompleted && (
+                                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => startEditTask(task)} className="p-0.5 text-muted-foreground hover:text-primary"><Pencil className="w-3 h-3" /></button>
+                                        <button onClick={() => setDeleteTarget({ type: "task", id: task.id, data: task })} className="p-0.5 text-muted-foreground hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+                                      </div>
+                                    )}
+                                  </div>
                                   {task.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{task.description}</p>}
-                                  {task.assignee && (
+                                  {task.assigned_to && (
                                     <div className="flex items-center gap-1 mt-2">
-                                      <div className="w-4 h-4 rounded-full gradient-brand flex items-center justify-center text-[8px] text-primary-foreground font-bold">{task.assignee.full_name.charAt(0)}</div>
-                                      <span className="text-[10px] text-muted-foreground">{task.assignee.full_name}</span>
+                                      <div className="w-4 h-4 rounded-full gradient-brand flex items-center justify-center text-[8px] text-primary-foreground font-bold">{getProfileName(task.assigned_to).charAt(0)}</div>
+                                      <span className="text-[10px] text-muted-foreground">{getProfileName(task.assigned_to)}</span>
                                     </div>
                                   )}
                                   {task.attachments && task.attachments.length > 0 && (
@@ -732,7 +982,7 @@ export default function ProjectsPage() {
                                   ))}
                                 </div>
                               </div>
-                              <Textarea placeholder="Describe your progress, what you worked on, blockers, next steps..." rows={4}
+                              <Textarea placeholder="Describe your progress, blockers, next steps..." rows={4}
                                 value={updateForm.content} onChange={(e) => setUpdateForm(f => ({ ...f, content: e.target.value }))} />
                               <ProjectFileUpload
                                 bucket="project-attachments"
@@ -760,6 +1010,7 @@ export default function ProjectsPage() {
                       <div className="space-y-3 max-h-[500px] overflow-y-auto">
                         {updates.map((u) => {
                           const author = profiles.find(p => p.user_id === u.author_id);
+                          const isEditing = editingUpdateId === u.id;
                           return (
                             <Card key={u.id}>
                               <CardContent className="p-3 space-y-2">
@@ -773,12 +1024,28 @@ export default function ProjectsPage() {
                                     <span className="text-[10px] text-muted-foreground">{format(new Date(u.created_at), "MMM d, h:mm a")}</span>
                                   </div>
                                   {(u.author_id === user?.id || isExecutive) && (
-                                    <button onClick={() => deleteUpdate(u.id)} className="text-muted-foreground hover:text-destructive transition-colors">
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
+                                    <div className="flex gap-1">
+                                      <button onClick={() => startEditUpdate(u)} className="text-muted-foreground hover:text-primary transition-colors"><Pencil className="w-3 h-3" /></button>
+                                      <button onClick={() => setDeleteTarget({ type: "update", id: u.id, data: u })} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-3 h-3" /></button>
+                                    </div>
                                   )}
                                 </div>
-                                <p className="text-sm text-foreground whitespace-pre-wrap">{u.content}</p>
+                                {isEditing ? (
+                                  <div className="space-y-2">
+                                    <div className="flex gap-1">
+                                      {UPDATE_TYPES.map(t => (
+                                        <Button key={t} size="sm" variant={editUpdateForm.update_type === t ? "default" : "outline"} onClick={() => setEditUpdateForm(f => ({ ...f, update_type: t }))} className="capitalize text-[10px] flex-1 h-7">{t}</Button>
+                                      ))}
+                                    </div>
+                                    <Textarea rows={3} value={editUpdateForm.content} onChange={(e) => setEditUpdateForm(f => ({ ...f, content: e.target.value }))} />
+                                    <div className="flex gap-2">
+                                      <Button size="sm" variant="outline" onClick={() => setEditingUpdateId(null)} className="flex-1 h-7 text-xs">Cancel</Button>
+                                      <Button size="sm" onClick={saveEditUpdate} className="flex-1 h-7 text-xs gradient-brand text-primary-foreground">Save</Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-foreground whitespace-pre-wrap">{u.content}</p>
+                                )}
                                 {u.attachment_urls && u.attachment_urls.length > 0 && (
                                   <div className="flex flex-wrap gap-2 pt-1">
                                     {u.attachment_urls.map((url: string, i: number) => {
@@ -803,33 +1070,23 @@ export default function ProjectsPage() {
                     )}
                   </TabsContent>
 
-                  {/* FILES TAB - All project files consolidated */}
+                  {/* FILES TAB */}
                   <TabsContent value="files" className="space-y-3">
                     {(() => {
                       const allFiles: { url: string; source: string; author?: string; date?: string }[] = [];
-                      
-                      // Project-level attachments
                       (selectedGroup.attachment_urls || []).forEach((url: string) => {
                         allFiles.push({ url, source: "Project Requirements", date: selectedGroup.created_at });
                       });
-                      
-                      // Task attachments
                       tasks.forEach((t) => {
                         (t.attachments || []).forEach((url: string) => {
-                          const assignee = t.assignee?.full_name || profiles.find((p: any) => p.user_id === t.created_by)?.full_name || "Unknown";
-                          allFiles.push({ url, source: `Task: ${t.title}`, author: assignee, date: t.created_at });
+                          allFiles.push({ url, source: `Task: ${t.title}`, author: getProfileName(t.created_by), date: t.created_at });
                         });
                       });
-                      
-                      // Update attachments
                       updates.forEach((u) => {
                         (u.attachment_urls || []).forEach((url: string) => {
-                          const author = profiles.find((p: any) => p.user_id === u.author_id)?.full_name || "Unknown";
-                          allFiles.push({ url, source: `${u.update_type} update`, author, date: u.created_at });
+                          allFiles.push({ url, source: `${u.update_type} update`, author: getProfileName(u.author_id), date: u.created_at });
                         });
                       });
-                      
-                      // Final deliverables
                       (selectedGroup.final_attachment_urls || []).forEach((url: string) => {
                         allFiles.push({ url, source: "Final Deliverable", date: selectedGroup.completed_at });
                       });
@@ -839,7 +1096,6 @@ export default function ProjectsPage() {
                           <div className="py-8 text-center text-muted-foreground">
                             <Paperclip className="w-8 h-8 mx-auto mb-2 opacity-30" />
                             <p className="text-sm font-heading">No files attached to this project yet</p>
-                            <p className="text-xs mt-1">Files from tasks, updates, and deliverables will appear here</p>
                           </div>
                         );
                       }
@@ -850,10 +1106,7 @@ export default function ProjectsPage() {
                           {allFiles.map((f, i) => {
                             const isImg = /\.(png|jpg|jpeg|gif|webp)$/i.test(f.url);
                             const fileName = (() => {
-                              try {
-                                const parts = f.url.split("/");
-                                return decodeURIComponent(parts[parts.length - 1]).replace(/^\d+_[a-z0-9]+\./, "file.");
-                              } catch { return `File ${i + 1}`; }
+                              try { return decodeURIComponent(f.url.split("/").pop()!.split("?")[0]).replace(/^\d+_/, ""); } catch { return `File ${i + 1}`; }
                             })();
                             return (
                               <Card key={i}>
@@ -869,9 +1122,7 @@ export default function ProjectsPage() {
                                       </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-sm font-heading font-semibold text-primary hover:underline truncate block">
-                                        {fileName}
-                                      </a>
+                                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-sm font-heading font-semibold text-primary hover:underline truncate block">{fileName}</a>
                                       <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
                                         <span className="bg-muted px-1.5 py-0.5 rounded capitalize">{f.source}</span>
                                         {f.author && <span>by {f.author}</span>}
@@ -1039,7 +1290,7 @@ export default function ProjectsPage() {
                       ) : comments.map((c) => {
                         const author = profiles.find(p => p.user_id === c.author_id);
                         return (
-                          <div key={c.id} className="p-3 bg-muted/50 rounded-lg">
+                          <div key={c.id} className="p-3 bg-muted/50 rounded-lg group">
                             <div className="flex items-center justify-between mb-1">
                               <div className="flex items-center gap-2">
                                 <div className="w-5 h-5 rounded-full gradient-brand flex items-center justify-center text-[8px] text-primary-foreground font-bold">
@@ -1049,7 +1300,7 @@ export default function ProjectsPage() {
                                 <span className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), "MMM d, h:mm a")}</span>
                               </div>
                               {(c.author_id === user?.id || isExecutive) && (
-                                <button onClick={() => deleteComment(c.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                                <button onClick={() => setDeleteTarget({ type: "comment", id: c.id, data: c })} className="text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100">
                                   <Trash2 className="w-3 h-3" />
                                 </button>
                               )}
@@ -1073,6 +1324,26 @@ export default function ProjectsPage() {
           <TeamChat groupId={selectedGroup.id} groupName={selectedGroup.name} onClose={() => setShowChat(false)} />
         )}
       </AnimatePresence>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />Delete {deleteTarget?.type}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will move the {deleteTarget?.type} to the recycle bin. The CEO can restore it later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteTarget} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </StaffLayout>
   );
 }

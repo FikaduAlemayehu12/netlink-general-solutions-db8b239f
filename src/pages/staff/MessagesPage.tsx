@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, Paperclip, Smile, FileText, Download, MessageCircle,
   Search, ArrowLeft, Image as ImageIcon, Phone, Video, Mic, Square,
-  Pencil, Trash2, X
+  Pencil, Trash2, X, Users
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -37,8 +37,9 @@ interface ConversationPreview {
 
 export default function MessagesPage() {
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
+  const { user, isCeo } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
@@ -56,6 +57,9 @@ export default function MessagesPage() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [deleteMessageId, setDeleteMessageId] = useState<string | null>(null);
+  // CEO viewing another user's conversations
+  const [ceoViewUserId, setCeoViewUserId] = useState<string | null>(null);
+  const [showCeoUserPicker, setShowCeoUserPicker] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -151,6 +155,9 @@ export default function MessagesPage() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // Reload conversations when CEO switches viewed user
+  useEffect(() => { loadConversations(); }, [ceoViewUserId]);
+
   const broadcastTyping = useCallback(() => {
     if (!typingChannelRef.current || !user) return;
     typingChannelRef.current.send({
@@ -168,25 +175,33 @@ export default function MessagesPage() {
   // ---- Data loading ----
   const loadProfiles = async () => {
     const { data } = await supabase.from("profiles").select("user_id, full_name, avatar_url, position");
-    setProfiles((data || []).filter((p) => p.user_id !== user?.id));
+    const all = (data || []);
+    setAllProfiles(all);
+    setProfiles(all.filter((p) => p.user_id !== user?.id));
   };
 
   const loadConversations = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("direct_messages")
-      .select("*")
-      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-      .order("created_at", { ascending: false })
-      .limit(500);
+    const viewUserId = ceoViewUserId || user.id;
+    
+    let query = supabase.from("direct_messages").select("*").order("created_at", { ascending: false }).limit(500);
+    
+    if (isCeo && ceoViewUserId) {
+      // CEO viewing a specific user's conversations
+      query = query.or(`sender_id.eq.${ceoViewUserId},receiver_id.eq.${ceoViewUserId}`);
+    } else {
+      query = query.or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+    }
+    
+    const { data } = await query;
 
     const convMap = new Map<string, ConversationPreview>();
     for (const msg of data || []) {
-      const partnerId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+      const partnerId = msg.sender_id === viewUserId ? msg.receiver_id : msg.sender_id;
       if (!convMap.has(partnerId)) {
         convMap.set(partnerId, { partnerId, lastMessage: msg.content || "📎 Attachment", lastTime: msg.created_at, unreadCount: 0 });
       }
-      if (msg.receiver_id === user.id && !msg.read) {
+      if (msg.receiver_id === viewUserId && !msg.read) {
         convMap.get(partnerId)!.unreadCount++;
       }
     }
@@ -195,15 +210,19 @@ export default function MessagesPage() {
 
   const loadMessages = async (partnerId: string) => {
     if (!user) return;
+    const viewUserId = ceoViewUserId || user.id;
     const { data } = await supabase
       .from("direct_messages")
       .select("*")
-      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`)
+      .or(`and(sender_id.eq.${viewUserId},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${viewUserId})`)
       .order("created_at", { ascending: true })
       .limit(300);
     setMessages(data || []);
-    const unread = (data || []).filter((m) => m.receiver_id === user.id && !m.read);
-    for (const m of unread) markRead(m.id);
+    // Only mark as read if viewing own messages
+    if (!ceoViewUserId) {
+      const unread = (data || []).filter((m) => m.receiver_id === user.id && !m.read);
+      for (const m of unread) markRead(m.id);
+    }
     loadReactions();
   };
 
@@ -379,7 +398,7 @@ export default function MessagesPage() {
   const isAudioUrl = (url: string) => /voice-.*\.(webm|ogg|mp3|wav)(\?|$)/i.test(url);
   const getFileName = (url: string) => decodeURIComponent(url.split("/").pop()?.split("?")[0] || "file").replace(/^\d+_/, "");
 
-  const getProfile = (id: string) => profiles.find((p) => p.user_id === id);
+  const getProfile = (id: string) => allProfiles.find((p) => p.user_id === id) || profiles.find((p) => p.user_id === id);
   const partnerProfile = selectedPartner ? getProfile(selectedPartner) : null;
 
   const filteredProfiles = profiles.filter((p) =>
@@ -436,11 +455,47 @@ export default function MessagesPage() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-heading font-bold text-foreground">Messages</h1>
-            <p className="text-muted-foreground text-sm">Private conversations with team members</p>
+            <p className="text-muted-foreground text-sm">
+              {ceoViewUserId ? `Viewing conversations of ${allProfiles.find(p => p.user_id === ceoViewUserId)?.full_name || "staff"}` : "Private conversations with team members"}
+            </p>
           </div>
-          <Button onClick={() => setShowContacts(true)} className="gradient-brand text-primary-foreground font-heading gap-2 shadow-glow">
-            <MessageCircle className="w-4 h-4" />New Chat
-          </Button>
+          <div className="flex gap-2">
+            {isCeo && (
+              <div className="relative">
+                <Button onClick={() => setShowCeoUserPicker(!showCeoUserPicker)} variant="outline" className="gap-2 text-sm">
+                  <Users className="w-4 h-4" />{ceoViewUserId ? "Switch User" : "View Staff"}
+                </Button>
+                {showCeoUserPicker && (
+                  <div className="absolute right-0 top-full mt-1 w-64 bg-card border border-border rounded-xl shadow-xl z-50 max-h-72 overflow-y-auto">
+                    <button onClick={() => { setCeoViewUserId(null); setShowCeoUserPicker(false); setSelectedPartner(null); loadConversations(); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors ${!ceoViewUserId ? "bg-primary/10 text-primary font-semibold" : ""}`}>
+                      My Conversations
+                    </button>
+                    {allProfiles.filter(p => p.user_id !== user?.id).map(p => (
+                      <button key={p.user_id} onClick={() => { setCeoViewUserId(p.user_id); setShowCeoUserPicker(false); setSelectedPartner(null); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors flex items-center gap-2 ${ceoViewUserId === p.user_id ? "bg-primary/10 text-primary font-semibold" : ""}`}>
+                        <div className="w-6 h-6 rounded-full gradient-brand flex items-center justify-center text-[9px] text-primary-foreground font-bold">{p.full_name?.charAt(0)}</div>
+                        <div>
+                          <div className="text-sm">{p.full_name}</div>
+                          <div className="text-[10px] text-muted-foreground">{p.position || "Staff"}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {ceoViewUserId && isCeo && (
+              <Button onClick={() => { setCeoViewUserId(null); setSelectedPartner(null); }} variant="outline" size="sm" className="gap-1 text-xs">
+                <X className="w-3 h-3" />Back to Mine
+              </Button>
+            )}
+            {!ceoViewUserId && (
+              <Button onClick={() => setShowContacts(true)} className="gradient-brand text-primary-foreground font-heading gap-2 shadow-glow">
+                <MessageCircle className="w-4 h-4" />New Chat
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden h-[calc(100vh-220px)] flex">
@@ -668,6 +723,11 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Input bar */}
+                {ceoViewUserId ? (
+                  <div className="p-3 border-t border-border text-center text-xs text-muted-foreground">
+                    <span>🔒 Read-only: viewing {allProfiles.find(p => p.user_id === ceoViewUserId)?.full_name}'s conversations</span>
+                  </div>
+                ) : (
                 <div className="p-3 border-t border-border">
                   {editingMessageId && (
                     <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-primary/5 border border-primary/20 rounded-lg text-xs text-muted-foreground">
@@ -716,6 +776,7 @@ export default function MessagesPage() {
                     )}
                   </div>
                 </div>
+                )}
               </>
             )}
           </div>
