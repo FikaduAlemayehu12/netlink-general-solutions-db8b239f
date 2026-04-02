@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, Paperclip, Smile, FileText, Download, MessageCircle,
   Search, ArrowLeft, Image as ImageIcon, Phone, Video, Mic, Square,
-  Pencil, Trash2, X
+  Pencil, Trash2, X, Users
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
