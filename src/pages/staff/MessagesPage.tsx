@@ -155,6 +155,9 @@ export default function MessagesPage() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // Reload conversations when CEO switches viewed user
+  useEffect(() => { loadConversations(); }, [ceoViewUserId]);
+
   const broadcastTyping = useCallback(() => {
     if (!typingChannelRef.current || !user) return;
     typingChannelRef.current.send({
