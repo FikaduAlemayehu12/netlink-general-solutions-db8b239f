@@ -723,6 +723,11 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Input bar */}
+                {ceoViewUserId ? (
+                  <div className="p-3 border-t border-border text-center text-xs text-muted-foreground">
+                    <span>🔒 Read-only: viewing {allProfiles.find(p => p.user_id === ceoViewUserId)?.full_name}'s conversations</span>
+                  </div>
+                ) : (
                 <div className="p-3 border-t border-border">
                   {editingMessageId && (
                     <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-primary/5 border border-primary/20 rounded-lg text-xs text-muted-foreground">
