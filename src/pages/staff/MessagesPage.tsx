@@ -172,7 +172,9 @@ export default function MessagesPage() {
   // ---- Data loading ----
   const loadProfiles = async () => {
     const { data } = await supabase.from("profiles").select("user_id, full_name, avatar_url, position");
-    setProfiles((data || []).filter((p) => p.user_id !== user?.id));
+    const all = (data || []);
+    setAllProfiles(all);
+    setProfiles(all.filter((p) => p.user_id !== user?.id));
   };
 
   const loadConversations = async () => {
