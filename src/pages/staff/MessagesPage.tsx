@@ -452,11 +452,47 @@ export default function MessagesPage() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-heading font-bold text-foreground">Messages</h1>
-            <p className="text-muted-foreground text-sm">Private conversations with team members</p>
+            <p className="text-muted-foreground text-sm">
+              {ceoViewUserId ? `Viewing conversations of ${allProfiles.find(p => p.user_id === ceoViewUserId)?.full_name || "staff"}` : "Private conversations with team members"}
+            </p>
           </div>
-          <Button onClick={() => setShowContacts(true)} className="gradient-brand text-primary-foreground font-heading gap-2 shadow-glow">
-            <MessageCircle className="w-4 h-4" />New Chat
-          </Button>
+          <div className="flex gap-2">
+            {isCeo && (
+              <div className="relative">
+                <Button onClick={() => setShowCeoUserPicker(!showCeoUserPicker)} variant="outline" className="gap-2 text-sm">
+                  <Users className="w-4 h-4" />{ceoViewUserId ? "Switch User" : "View Staff"}
+                </Button>
+                {showCeoUserPicker && (
+                  <div className="absolute right-0 top-full mt-1 w-64 bg-card border border-border rounded-xl shadow-xl z-50 max-h-72 overflow-y-auto">
+                    <button onClick={() => { setCeoViewUserId(null); setShowCeoUserPicker(false); setSelectedPartner(null); loadConversations(); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors ${!ceoViewUserId ? "bg-primary/10 text-primary font-semibold" : ""}`}>
+                      My Conversations
+                    </button>
+                    {allProfiles.filter(p => p.user_id !== user?.id).map(p => (
+                      <button key={p.user_id} onClick={() => { setCeoViewUserId(p.user_id); setShowCeoUserPicker(false); setSelectedPartner(null); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors flex items-center gap-2 ${ceoViewUserId === p.user_id ? "bg-primary/10 text-primary font-semibold" : ""}`}>
+                        <div className="w-6 h-6 rounded-full gradient-brand flex items-center justify-center text-[9px] text-primary-foreground font-bold">{p.full_name?.charAt(0)}</div>
+                        <div>
+                          <div className="text-sm">{p.full_name}</div>
+                          <div className="text-[10px] text-muted-foreground">{p.position || "Staff"}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {ceoViewUserId && isCeo && (
+              <Button onClick={() => { setCeoViewUserId(null); setSelectedPartner(null); }} variant="outline" size="sm" className="gap-1 text-xs">
+                <X className="w-3 h-3" />Back to Mine
+              </Button>
+            )}
+            {!ceoViewUserId && (
+              <Button onClick={() => setShowContacts(true)} className="gradient-brand text-primary-foreground font-heading gap-2 shadow-glow">
+                <MessageCircle className="w-4 h-4" />New Chat
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden h-[calc(100vh-220px)] flex">
