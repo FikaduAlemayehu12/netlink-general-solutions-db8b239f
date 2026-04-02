@@ -37,8 +37,9 @@ interface ConversationPreview {
 
 export default function MessagesPage() {
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
+  const { user, isCeo } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
@@ -56,6 +57,9 @@ export default function MessagesPage() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [deleteMessageId, setDeleteMessageId] = useState<string | null>(null);
+  // CEO viewing another user's conversations
+  const [ceoViewUserId, setCeoViewUserId] = useState<string | null>(null);
+  const [showCeoUserPicker, setShowCeoUserPicker] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
