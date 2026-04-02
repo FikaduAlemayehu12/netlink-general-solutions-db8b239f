@@ -207,15 +207,19 @@ export default function MessagesPage() {
 
   const loadMessages = async (partnerId: string) => {
     if (!user) return;
+    const viewUserId = ceoViewUserId || user.id;
     const { data } = await supabase
       .from("direct_messages")
       .select("*")
-      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`)
+      .or(`and(sender_id.eq.${viewUserId},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${viewUserId})`)
       .order("created_at", { ascending: true })
       .limit(300);
     setMessages(data || []);
-    const unread = (data || []).filter((m) => m.receiver_id === user.id && !m.read);
-    for (const m of unread) markRead(m.id);
+    // Only mark as read if viewing own messages
+    if (!ceoViewUserId) {
+      const unread = (data || []).filter((m) => m.receiver_id === user.id && !m.read);
+      for (const m of unread) markRead(m.id);
+    }
     loadReactions();
   };
 
