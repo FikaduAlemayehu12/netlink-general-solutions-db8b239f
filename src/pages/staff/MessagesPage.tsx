@@ -398,7 +398,7 @@ export default function MessagesPage() {
   const isAudioUrl = (url: string) => /voice-.*\.(webm|ogg|mp3|wav)(\?|$)/i.test(url);
   const getFileName = (url: string) => decodeURIComponent(url.split("/").pop()?.split("?")[0] || "file").replace(/^\d+_/, "");
 
-  const getProfile = (id: string) => profiles.find((p) => p.user_id === id);
+  const getProfile = (id: string) => allProfiles.find((p) => p.user_id === id) || profiles.find((p) => p.user_id === id);
   const partnerProfile = selectedPartner ? getProfile(selectedPartner) : null;
 
   const filteredProfiles = profiles.filter((p) =>
