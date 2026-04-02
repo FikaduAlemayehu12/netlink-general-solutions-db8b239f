@@ -179,20 +179,26 @@ export default function MessagesPage() {
 
   const loadConversations = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("direct_messages")
-      .select("*")
-      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-      .order("created_at", { ascending: false })
-      .limit(500);
+    const viewUserId = ceoViewUserId || user.id;
+    
+    let query = supabase.from("direct_messages").select("*").order("created_at", { ascending: false }).limit(500);
+    
+    if (isCeo && ceoViewUserId) {
+      // CEO viewing a specific user's conversations
+      query = query.or(`sender_id.eq.${ceoViewUserId},receiver_id.eq.${ceoViewUserId}`);
+    } else {
+      query = query.or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+    }
+    
+    const { data } = await query;
 
     const convMap = new Map<string, ConversationPreview>();
     for (const msg of data || []) {
-      const partnerId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+      const partnerId = msg.sender_id === viewUserId ? msg.receiver_id : msg.sender_id;
       if (!convMap.has(partnerId)) {
         convMap.set(partnerId, { partnerId, lastMessage: msg.content || "📎 Attachment", lastTime: msg.created_at, unreadCount: 0 });
       }
-      if (msg.receiver_id === user.id && !msg.read) {
+      if (msg.receiver_id === viewUserId && !msg.read) {
         convMap.get(partnerId)!.unreadCount++;
       }
     }
