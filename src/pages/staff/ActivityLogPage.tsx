@@ -114,9 +114,14 @@ export default function ActivityLogPage() {
                       <Badge className={`text-[10px] ${MODULE_COLORS[log.module] || "bg-muted text-muted-foreground"}`}>{log.module}</Badge>
                     </div>
                     {log.details && Object.keys(log.details).length > 0 && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {log.details.title || log.details.description || JSON.stringify(log.details).slice(0, 100)}
-                      </p>
+                      <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                        {Object.entries(log.details).map(([key, value]) => (
+                          <p key={key} className="break-words">
+                            <span className="font-medium text-foreground/70 capitalize">{key.replace(/_/g, ' ')}:</span>{' '}
+                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                          </p>
+                        ))}
+                      </div>
                     )}
                   </div>
                   <span className="text-[10px] text-muted-foreground flex-shrink-0">
