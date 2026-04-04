@@ -256,12 +256,39 @@ export default function ActivityLogPage() {
                 <div className="border-t pt-3">
                   <p className="text-xs font-heading font-semibold text-foreground mb-2">Full Details</p>
                   <div className="space-y-2">
-                    {detailEntries.map(([key, value]) => (
-                      <div key={key} className="bg-muted/50 rounded-lg p-2.5">
-                        <p className="text-[11px] font-medium text-primary capitalize mb-0.5">{key.replace(/_/g, " ")}</p>
-                        <p className="text-sm text-foreground whitespace-pre-wrap break-words">{formatValue(value)}</p>
-                      </div>
-                    ))}
+                    {detailEntries
+                      .filter(([key, value]) => {
+                        // Skip raw UUIDs used as values (e.g. old "to: <uuid>" entries)
+                        const strVal = String(value);
+                        return !(key === "to" && isUUID(strVal));
+                      })
+                      .map(([key, value]) => {
+                        const label = DETAIL_LABELS[key] || key.replace(/_/g, " ");
+                        const strVal = String(value);
+                        // Resolve conversation_type to friendly label
+                        if (key === "conversation_type" && CONV_TYPE_LABELS[strVal]) {
+                          const ConvIcon = CONV_TYPE_LABELS[strVal].icon;
+                          return (
+                            <div key={key} className="bg-muted/50 rounded-lg p-2.5 flex items-center gap-2">
+                              <ConvIcon className="w-4 h-4 text-primary flex-shrink-0" />
+                              <div>
+                                <p className="text-[11px] font-medium text-primary mb-0.5">{label}</p>
+                                <p className="text-sm text-foreground">{CONV_TYPE_LABELS[strVal].label}</p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        // Resolve UUID values to profile names
+                        const displayValue = isUUID(strVal) && profiles[strVal]
+                          ? profiles[strVal].full_name
+                          : formatValue(value);
+                        return (
+                          <div key={key} className="bg-muted/50 rounded-lg p-2.5">
+                            <p className="text-[11px] font-medium text-primary capitalize mb-0.5">{label}</p>
+                            <p className="text-sm text-foreground whitespace-pre-wrap break-words">{displayValue}</p>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               )}
