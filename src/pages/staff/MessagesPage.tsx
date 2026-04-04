@@ -381,7 +381,13 @@ export default function MessagesPage() {
     const msg = messages.find(m => m.id === deleteMessageId);
     if (msg) {
       await archiveAndDelete("direct_messages", deleteMessageId, msg, user.id);
-      await logActivity("delete", "messages", deleteMessageId, "direct_message");
+      const partnerProfile = profiles.find(p => p.user_id === (msg.sender_id === user.id ? msg.receiver_id : msg.sender_id));
+      await logActivity("delete", "messages", deleteMessageId, "direct_message", {
+        sender: profiles.find(p => p.user_id === msg.sender_id)?.full_name || "Unknown",
+        recipient: profiles.find(p => p.user_id === msg.receiver_id)?.full_name || "Unknown",
+        content: msg.content,
+        conversation_type: msg.attachment_urls?.some((u: string) => u.includes("voice-")) ? "audio" : msg.attachment_urls?.length ? "attachment" : "text",
+      });
     }
     setMessages((prev) => prev.filter((m) => m.id !== deleteMessageId));
     setDeleteMessageId(null);
