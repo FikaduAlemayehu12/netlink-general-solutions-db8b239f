@@ -398,10 +398,18 @@ export default function MessagesPage() {
   const startCall = (audioOnly: boolean) => {
     if (!selectedPartner || !user) return;
     setCallState({ active: true, audioOnly });
+    const callerName = profiles.find(p => p.user_id === user.id)?.full_name || "Someone";
+    const recipientName = profiles.find(p => p.user_id === selectedPartner)?.full_name || "Unknown";
+    logActivity("create", "messages", undefined, "call", {
+      sender: callerName,
+      recipient: recipientName,
+      conversation_type: audioOnly ? "audio_call" : "video_call",
+      content: `${callerName} started a ${audioOnly ? "voice" : "video"} call with ${recipientName}`,
+    });
     // Notify partner
     supabase.from("notifications").insert({
       user_id: selectedPartner, type: "call", title: audioOnly ? "Incoming voice call" : "Incoming video call",
-      message: `${profiles.find(p => p.user_id === user.id)?.full_name || "Someone"} is calling you`,
+      message: `${callerName} is calling you`,
       related_id: user.id,
     });
   };
