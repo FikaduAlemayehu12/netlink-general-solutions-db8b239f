@@ -160,6 +160,8 @@ export default function ActivityLogPage() {
           <div className="space-y-1">
             {filtered.map((log: any) => {
               const preview = log.details?.title || log.details?.description || log.details?.content;
+              const convType = log.details?.conversation_type;
+              const ConvIcon = convType && CONV_TYPE_LABELS[convType]?.icon;
               return (
                 <Card
                   key={log.id}
@@ -176,8 +178,17 @@ export default function ActivityLogPage() {
                         <span className="text-sm font-medium text-foreground">{profiles[log.user_id]?.full_name || "Unknown"}</span>
                         <Badge variant="outline" className="text-[10px]">{ACTION_LABELS[log.action] || log.action}</Badge>
                         <Badge className={`text-[10px] ${MODULE_COLORS[log.module] || "bg-muted text-muted-foreground"}`}>{log.module}</Badge>
+                        {ConvIcon && <ConvIcon className="w-3.5 h-3.5 text-muted-foreground" />}
                       </div>
-                      {preview && (
+                      {log.details?.sender && log.details?.recipient && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          <span className="font-medium text-foreground/70">{log.details.sender}</span>
+                          {" → "}
+                          <span className="font-medium text-foreground/70">{log.details.recipient}</span>
+                          {log.details.content && `: ${String(log.details.content).slice(0, 80)}${String(log.details.content).length > 80 ? "…" : ""}`}
+                        </p>
+                      )}
+                      {!log.details?.sender && preview && (
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">{String(preview)}</p>
                       )}
                     </div>
