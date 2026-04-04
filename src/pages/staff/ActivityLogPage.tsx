@@ -34,12 +34,45 @@ const ACTION_LABELS: Record<string, string> = {
   reject: "Rejected",
 };
 
+const CONV_TYPE_LABELS: Record<string, { label: string; icon: typeof MessageSquare }> = {
+  text: { label: "Text Message", icon: MessageSquare },
+  audio: { label: "Voice Message", icon: Phone },
+  audio_call: { label: "Voice Call", icon: Phone },
+  video_call: { label: "Video Call", icon: Video },
+  attachment: { label: "File Attachment", icon: Paperclip },
+};
+
+// Keys to display with friendly labels, hiding raw IDs
+const DETAIL_LABELS: Record<string, string> = {
+  sender: "From",
+  recipient: "To",
+  content: "Message Content",
+  conversation_type: "Type",
+  title: "Title",
+  description: "Description",
+  status: "Status",
+  priority: "Priority",
+  category: "Category",
+  reason: "Reason",
+  leave_type: "Leave Type",
+  start_date: "Start Date",
+  end_date: "End Date",
+  notes: "Notes",
+  plan_type: "Plan Type",
+  old_status: "Previous Status",
+  new_status: "New Status",
+};
+
 function formatValue(value: any): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value)) return value.length === 0 ? "None" : value.join(", ");
   if (typeof value === "object") return JSON.stringify(value, null, 2);
   return String(value);
+}
+
+function isUUID(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
 export default function ActivityLogPage() {
