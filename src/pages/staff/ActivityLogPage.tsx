@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Activity, Search, Filter, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Activity, Search, Filter, ChevronDown, MessageSquare, Video, Phone, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,12 +34,45 @@ const ACTION_LABELS: Record<string, string> = {
   reject: "Rejected",
 };
 
+const CONV_TYPE_LABELS: Record<string, { label: string; icon: typeof MessageSquare }> = {
+  text: { label: "Text Message", icon: MessageSquare },
+  audio: { label: "Voice Message", icon: Phone },
+  audio_call: { label: "Voice Call", icon: Phone },
+  video_call: { label: "Video Call", icon: Video },
+  attachment: { label: "File Attachment", icon: Paperclip },
+};
+
+// Keys to display with friendly labels, hiding raw IDs
+const DETAIL_LABELS: Record<string, string> = {
+  sender: "From",
+  recipient: "To",
+  content: "Message Content",
+  conversation_type: "Type",
+  title: "Title",
+  description: "Description",
+  status: "Status",
+  priority: "Priority",
+  category: "Category",
+  reason: "Reason",
+  leave_type: "Leave Type",
+  start_date: "Start Date",
+  end_date: "End Date",
+  notes: "Notes",
+  plan_type: "Plan Type",
+  old_status: "Previous Status",
+  new_status: "New Status",
+};
+
 function formatValue(value: any): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value)) return value.length === 0 ? "None" : value.join(", ");
   if (typeof value === "object") return JSON.stringify(value, null, 2);
   return String(value);
+}
+
+function isUUID(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
 export default function ActivityLogPage() {
@@ -127,6 +160,8 @@ export default function ActivityLogPage() {
           <div className="space-y-1">
             {filtered.map((log: any) => {
               const preview = log.details?.title || log.details?.description || log.details?.content;
+              const convType = log.details?.conversation_type;
+              const ConvIcon = convType && CONV_TYPE_LABELS[convType]?.icon;
               return (
                 <Card
                   key={log.id}
@@ -143,8 +178,17 @@ export default function ActivityLogPage() {
                         <span className="text-sm font-medium text-foreground">{profiles[log.user_id]?.full_name || "Unknown"}</span>
                         <Badge variant="outline" className="text-[10px]">{ACTION_LABELS[log.action] || log.action}</Badge>
                         <Badge className={`text-[10px] ${MODULE_COLORS[log.module] || "bg-muted text-muted-foreground"}`}>{log.module}</Badge>
+                        {ConvIcon && <ConvIcon className="w-3.5 h-3.5 text-muted-foreground" />}
                       </div>
-                      {preview && (
+                      {log.details?.sender && log.details?.recipient && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          <span className="font-medium text-foreground/70">{log.details.sender}</span>
+                          {" → "}
+                          <span className="font-medium text-foreground/70">{log.details.recipient}</span>
+                          {log.details.content && `: ${String(log.details.content).slice(0, 80)}${String(log.details.content).length > 80 ? "…" : ""}`}
+                        </p>
+                      )}
+                      {!log.details?.sender && preview && (
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">{String(preview)}</p>
                       )}
                     </div>
@@ -212,12 +256,39 @@ export default function ActivityLogPage() {
                 <div className="border-t pt-3">
                   <p className="text-xs font-heading font-semibold text-foreground mb-2">Full Details</p>
                   <div className="space-y-2">
-                    {detailEntries.map(([key, value]) => (
-                      <div key={key} className="bg-muted/50 rounded-lg p-2.5">
-                        <p className="text-[11px] font-medium text-primary capitalize mb-0.5">{key.replace(/_/g, " ")}</p>
-                        <p className="text-sm text-foreground whitespace-pre-wrap break-words">{formatValue(value)}</p>
-                      </div>
-                    ))}
+                    {detailEntries
+                      .filter(([key, value]) => {
+                        // Skip raw UUIDs used as values (e.g. old "to: <uuid>" entries)
+                        const strVal = String(value);
+                        return !(key === "to" && isUUID(strVal));
+                      })
+                      .map(([key, value]) => {
+                        const label = DETAIL_LABELS[key] || key.replace(/_/g, " ");
+                        const strVal = String(value);
+                        // Resolve conversation_type to friendly label
+                        if (key === "conversation_type" && CONV_TYPE_LABELS[strVal]) {
+                          const ConvIcon = CONV_TYPE_LABELS[strVal].icon;
+                          return (
+                            <div key={key} className="bg-muted/50 rounded-lg p-2.5 flex items-center gap-2">
+                              <ConvIcon className="w-4 h-4 text-primary flex-shrink-0" />
+                              <div>
+                                <p className="text-[11px] font-medium text-primary mb-0.5">{label}</p>
+                                <p className="text-sm text-foreground">{CONV_TYPE_LABELS[strVal].label}</p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        // Resolve UUID values to profile names
+                        const displayValue = isUUID(strVal) && profiles[strVal]
+                          ? profiles[strVal].full_name
+                          : formatValue(value);
+                        return (
+                          <div key={key} className="bg-muted/50 rounded-lg p-2.5">
+                            <p className="text-[11px] font-medium text-primary capitalize mb-0.5">{label}</p>
+                            <p className="text-sm text-foreground whitespace-pre-wrap break-words">{displayValue}</p>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               )}

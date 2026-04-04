@@ -264,7 +264,16 @@ export default function MessagesPage() {
     });
     setInput("");
     setSending(false);
-    await logActivity("create", "messages", undefined, "direct_message", { to: selectedPartner });
+    const recipientProfile = profiles.find(p => p.user_id === selectedPartner);
+    const hasAttachments = (attachmentUrls?.length ?? 0) > 0;
+    const isVoice = attachmentUrls?.some(u => u.includes("voice-"));
+    const conversationType = isVoice ? "audio" : hasAttachments ? "attachment" : "text";
+    await logActivity("create", "messages", undefined, "direct_message", {
+      sender: myProfile.data?.full_name || "Unknown",
+      recipient: recipientProfile?.full_name || "Unknown",
+      content: content,
+      conversation_type: conversationType,
+    });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -372,7 +381,13 @@ export default function MessagesPage() {
     const msg = messages.find(m => m.id === deleteMessageId);
     if (msg) {
       await archiveAndDelete("direct_messages", deleteMessageId, msg, user.id);
-      await logActivity("delete", "messages", deleteMessageId, "direct_message");
+      const partnerProfile = profiles.find(p => p.user_id === (msg.sender_id === user.id ? msg.receiver_id : msg.sender_id));
+      await logActivity("delete", "messages", deleteMessageId, "direct_message", {
+        sender: profiles.find(p => p.user_id === msg.sender_id)?.full_name || "Unknown",
+        recipient: profiles.find(p => p.user_id === msg.receiver_id)?.full_name || "Unknown",
+        content: msg.content,
+        conversation_type: msg.attachment_urls?.some((u: string) => u.includes("voice-")) ? "audio" : msg.attachment_urls?.length ? "attachment" : "text",
+      });
     }
     setMessages((prev) => prev.filter((m) => m.id !== deleteMessageId));
     setDeleteMessageId(null);
@@ -383,10 +398,18 @@ export default function MessagesPage() {
   const startCall = (audioOnly: boolean) => {
     if (!selectedPartner || !user) return;
     setCallState({ active: true, audioOnly });
+    const callerName = profiles.find(p => p.user_id === user.id)?.full_name || "Someone";
+    const recipientName = profiles.find(p => p.user_id === selectedPartner)?.full_name || "Unknown";
+    logActivity("create", "messages", undefined, "call", {
+      sender: callerName,
+      recipient: recipientName,
+      conversation_type: audioOnly ? "audio_call" : "video_call",
+      content: `${callerName} started a ${audioOnly ? "voice" : "video"} call with ${recipientName}`,
+    });
     // Notify partner
     supabase.from("notifications").insert({
       user_id: selectedPartner, type: "call", title: audioOnly ? "Incoming voice call" : "Incoming video call",
-      message: `${profiles.find(p => p.user_id === user.id)?.full_name || "Someone"} is calling you`,
+      message: `${callerName} is calling you`,
       related_id: user.id,
     });
   };
