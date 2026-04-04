@@ -264,7 +264,16 @@ export default function MessagesPage() {
     });
     setInput("");
     setSending(false);
-    await logActivity("create", "messages", undefined, "direct_message", { to: selectedPartner });
+    const recipientProfile = profiles.find(p => p.user_id === selectedPartner);
+    const hasAttachments = (attachmentUrls?.length ?? 0) > 0;
+    const isVoice = attachmentUrls?.some(u => u.includes("voice-"));
+    const conversationType = isVoice ? "audio" : hasAttachments ? "attachment" : "text";
+    await logActivity("create", "messages", undefined, "direct_message", {
+      sender: myProfile.data?.full_name || "Unknown",
+      recipient: recipientProfile?.full_name || "Unknown",
+      content: content,
+      conversation_type: conversationType,
+    });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
