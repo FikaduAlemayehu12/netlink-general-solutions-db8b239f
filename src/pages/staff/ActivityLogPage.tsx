@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Activity, Search, Filter, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Activity, Search, Filter, ChevronDown, MessageSquare, Video, Phone, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
