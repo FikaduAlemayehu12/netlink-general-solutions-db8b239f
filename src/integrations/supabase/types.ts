@@ -240,6 +240,84 @@ export type Database = {
           },
         ]
       }
+      job_vacancies: {
+        Row: {
+          author_id: string
+          benefits: string | null
+          certifications: string | null
+          created_at: string
+          deadline: string | null
+          department: string | null
+          description: string | null
+          education: string | null
+          employment_type: string
+          experience: string | null
+          id: string
+          location: string | null
+          openings: number
+          qualifications: string | null
+          reporting_manager: string | null
+          responsibilities: string | null
+          salary_range: string | null
+          skills: string | null
+          status: string
+          title: string
+          updated_at: string
+          vacancy_type: string
+          working_hours: string | null
+        }
+        Insert: {
+          author_id: string
+          benefits?: string | null
+          certifications?: string | null
+          created_at?: string
+          deadline?: string | null
+          department?: string | null
+          description?: string | null
+          education?: string | null
+          employment_type?: string
+          experience?: string | null
+          id?: string
+          location?: string | null
+          openings?: number
+          qualifications?: string | null
+          reporting_manager?: string | null
+          responsibilities?: string | null
+          salary_range?: string | null
+          skills?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          vacancy_type?: string
+          working_hours?: string | null
+        }
+        Update: {
+          author_id?: string
+          benefits?: string | null
+          certifications?: string | null
+          created_at?: string
+          deadline?: string | null
+          department?: string | null
+          description?: string | null
+          education?: string | null
+          employment_type?: string
+          experience?: string | null
+          id?: string
+          location?: string | null
+          openings?: number
+          qualifications?: string | null
+          reporting_manager?: string | null
+          responsibilities?: string | null
+          salary_range?: string | null
+          skills?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          vacancy_type?: string
+          working_hours?: string | null
+        }
+        Relationships: []
+      }
       leave_requests: {
         Row: {
           approved_at: string | null
