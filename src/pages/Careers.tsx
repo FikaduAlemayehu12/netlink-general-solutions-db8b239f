@@ -1,46 +1,33 @@
 import { motion } from "framer-motion";
-import { Briefcase, Users, Heart, Zap } from "lucide-react";
-import { useState } from "react";
+import { Briefcase, Users, Heart, Zap, MapPin, Clock, DollarSign, Calendar } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
 
-const jobs = [
-  {
-    title: "Network Engineer",
-    type: "Full-time",
-    location: "Addis Ababa",
-    dept: "Engineering",
-    desc: "Design, implement, and manage enterprise network solutions for our clients.",
-  },
-  {
-    title: "Cybersecurity Analyst",
-    type: "Full-time",
-    location: "Addis Ababa",
-    dept: "Security",
-    desc: "Monitor, detect, and respond to cybersecurity incidents across client environments.",
-  },
-  {
-    title: "Data Center Engineer",
-    type: "Full-time",
-    location: "Addis Ababa",
-    dept: "Infrastructure",
-    desc: "Maintain and optimize data center facilities and power systems.",
-  },
-  {
-    title: "ERP Consultant",
-    type: "Full-time",
-    location: "Addis Ababa",
-    dept: "Business Solutions",
-    desc: "Implement and customize ERP solutions for enterprise clients.",
-  },
-  {
-    title: "Software Engineer",
-    type: "Full-time",
-    location: "Addis Ababa",
-    dept: "Software",
-    desc: "Build innovative software products and digital office solutions.",
-  },
-];
+interface Vacancy {
+  id: string;
+  title: string;
+  department: string | null;
+  description: string | null;
+  responsibilities: string | null;
+  qualifications: string | null;
+  skills: string | null;
+  experience: string | null;
+  education: string | null;
+  certifications: string | null;
+  employment_type: string;
+  salary_range: string | null;
+  benefits: string | null;
+  location: string | null;
+  working_hours: string | null;
+  deadline: string | null;
+  openings: number;
+  reporting_manager: string | null;
+  created_at: string;
+}
 
-const benefits = [
+const benefitsList = [
   { icon: Users, label: "Team Culture", desc: "Collaborative, diverse team of certified professionals" },
   { icon: Zap, label: "Growth", desc: "International certification support and career advancement" },
   { icon: Heart, label: "Benefits", desc: "Competitive salary, health coverage, and leave policies" },
@@ -48,16 +35,30 @@ const benefits = [
 ];
 
 export default function Careers() {
+  const [vacancies, setVacancies] = useState<Vacancy[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", email: "", position: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    supabase.from("job_vacancies" as any).select("*").eq("status", "published").eq("vacancy_type", "external").order("created_at", { ascending: false })
+      .then(({ data }) => setVacancies((data || []) as any));
+  }, []);
 
   const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitted(true);
+  const submit = (e: React.FormEvent) => { e.preventDefault(); setSubmitted(true); };
+
+  const DetailSection = ({ label, value }: { label: string; value: string | null | undefined }) => {
+    if (!value) return null;
+    return (
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+        <p className="text-sm text-foreground/80 whitespace-pre-wrap">{value}</p>
+      </div>
+    );
   };
 
   return (
@@ -83,15 +84,9 @@ export default function Careers() {
         <div className="container mx-auto px-4">
           <h2 className="font-heading font-bold text-3xl text-center mb-10">Why Work with Us?</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {benefits.map(({ icon: Icon, label, desc }, i) => (
-              <motion.div
-                key={label}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="p-6 bg-card rounded-xl border border-border shadow-card text-center"
-              >
+            {benefitsList.map(({ icon: Icon, label, desc }, i) => (
+              <motion.div key={label} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}
+                className="p-6 bg-card rounded-xl border border-border shadow-card text-center">
                 <div className="w-12 h-12 gradient-brand rounded-xl flex items-center justify-center mx-auto mb-4">
                   <Icon className="w-6 h-6 text-primary-foreground" />
                 </div>
@@ -103,35 +98,54 @@ export default function Careers() {
         </div>
       </section>
 
-      {/* Jobs */}
+      {/* Open Positions */}
       <section className="py-16 bg-secondary/40">
         <div className="container mx-auto px-4 max-w-4xl">
           <h2 className="font-heading font-bold text-3xl mb-8">Open Positions</h2>
-          <div className="flex flex-col gap-4">
-            {jobs.map(({ title, type, location, dept, desc }, i) => (
-              <motion.div
-                key={title}
-                initial={{ opacity: 0, x: -20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.08 }}
-                className="p-5 bg-card rounded-xl border border-border shadow-card hover:border-cyan-brand/30 transition-all flex flex-col sm:flex-row sm:items-center gap-4"
-              >
-                <div className="flex-1">
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    <span className="text-xs px-2 py-0.5 bg-cyan-brand/10 text-cyan-brand rounded-full">{dept}</span>
-                    <span className="text-xs px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full">{type}</span>
-                    <span className="text-xs px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full">{location}</span>
+          {vacancies.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">No open positions at the moment. Check back soon!</p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {vacancies.map((v, i) => (
+                <motion.div key={v.id} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.06 }}
+                  className="bg-card rounded-xl border border-border shadow-card hover:border-cyan-brand/30 transition-all overflow-hidden">
+                  <div className="p-5 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer" onClick={() => setExpandedId(expandedId === v.id ? null : v.id)}>
+                    <div className="flex-1">
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {v.department && <span className="text-xs px-2 py-0.5 bg-cyan-brand/10 text-cyan-brand rounded-full">{v.department}</span>}
+                        <Badge variant="outline" className="text-xs">{v.employment_type}</Badge>
+                        {v.location && <span className="text-xs px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full">{v.location}</span>}
+                      </div>
+                      <div className="font-heading font-semibold text-base">{v.title}</div>
+                      <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
+                        {v.openings > 0 && <span><Users className="w-3 h-3 inline mr-1" />{v.openings} opening{v.openings > 1 ? "s" : ""}</span>}
+                        {v.deadline && <span><Calendar className="w-3 h-3 inline mr-1" />Deadline: {format(new Date(v.deadline), "MMM d, yyyy")}</span>}
+                        {v.salary_range && <span><DollarSign className="w-3 h-3 inline mr-1" />{v.salary_range}</span>}
+                      </div>
+                    </div>
+                    <button className="shrink-0 px-4 py-2 gradient-brand text-primary-foreground text-sm font-heading font-semibold rounded-lg hover:opacity-90 transition-opacity">
+                      {expandedId === v.id ? "Hide Details" : "View Details"}
+                    </button>
                   </div>
-                  <div className="font-heading font-semibold text-base">{title}</div>
-                  <div className="text-sm text-muted-foreground mt-1">{desc}</div>
-                </div>
-                <button className="shrink-0 px-4 py-2 gradient-brand text-primary-foreground text-sm font-heading font-semibold rounded-lg hover:opacity-90 transition-opacity">
-                  Apply Now
-                </button>
-              </motion.div>
-            ))}
-          </div>
+                  {expandedId === v.id && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                      className="border-t border-border px-5 py-4 space-y-3 bg-muted/30">
+                      <DetailSection label="Job Description" value={v.description} />
+                      <DetailSection label="Responsibilities" value={v.responsibilities} />
+                      <DetailSection label="Qualifications" value={v.qualifications} />
+                      <DetailSection label="Skills" value={v.skills} />
+                      <DetailSection label="Experience" value={v.experience} />
+                      <DetailSection label="Education" value={v.education} />
+                      <DetailSection label="Certifications" value={v.certifications} />
+                      <DetailSection label="Benefits" value={v.benefits} />
+                      <DetailSection label="Working Hours" value={v.working_hours} />
+                      <DetailSection label="Reporting Manager" value={v.reporting_manager} />
+                    </motion.div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -165,7 +179,7 @@ export default function Careers() {
                 <select name="position" value={form.position} onChange={handle}
                   className="w-full px-4 py-2.5 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-ring">
                   <option value="">Select a position...</option>
-                  {jobs.map((j) => <option key={j.title}>{j.title}</option>)}
+                  {vacancies.map(v => <option key={v.id}>{v.title}</option>)}
                   <option>Other</option>
                 </select>
               </div>
