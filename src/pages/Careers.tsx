@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
-import { Briefcase, Users, Heart, Zap, MapPin, Clock, DollarSign, Calendar } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Briefcase, Users, Heart, Zap, Calendar, DollarSign, Upload, FileText, X, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
 interface Vacancy {
@@ -35,10 +36,14 @@ const benefitsList = [
 ];
 
 export default function Careers() {
+  const { toast } = useToast();
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", email: "", position: "", message: "" });
+  const [cvFile, setCvFile] = useState<File | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     supabase.from("job_vacancies" as any).select("*").eq("status", "published").eq("vacancy_type", "external").order("created_at", { ascending: false })
@@ -49,7 +54,70 @@ export default function Careers() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const submit = (e: React.FormEvent) => { e.preventDefault(); setSubmitted(true); };
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      toast({ title: "File too large", description: "Maximum file size is 10MB", variant: "destructive" });
+      return;
+    }
+    const allowed = [".pdf", ".doc", ".docx"];
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    if (!allowed.includes(ext)) {
+      toast({ title: "Invalid file type", description: "Please upload a PDF or Word document", variant: "destructive" });
+      return;
+    }
+    setCvFile(file);
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.email.trim() || !form.message.trim()) return;
+    setSubmitting(true);
+
+    try {
+      let cvUrl: string | null = null;
+
+      // Upload CV if provided
+      if (cvFile) {
+        const fileExt = cvFile.name.split(".").pop();
+        const fileName = `${Date.now()}-${crypto.randomUUID()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("job-applications")
+          .upload(fileName, cvFile);
+        if (uploadError) {
+          toast({ title: "CV upload failed", description: uploadError.message, variant: "destructive" });
+          setSubmitting(false);
+          return;
+        }
+        const { data: urlData } = supabase.storage.from("job-applications").getPublicUrl(fileName);
+        cvUrl = urlData.publicUrl;
+      }
+
+      // Find matching vacancy ID
+      const matchingVacancy = vacancies.find(v => v.title === form.position);
+
+      // Submit via edge function
+      const { error } = await supabase.functions.invoke("handle-job-application", {
+        body: {
+          applicant_name: form.name.trim(),
+          applicant_email: form.email.trim(),
+          position: form.position || null,
+          cover_message: form.message.trim(),
+          cv_url: cvUrl,
+          vacancy_id: matchingVacancy?.id || null,
+        },
+      });
+
+      if (error) throw error;
+      setSubmitted(true);
+    } catch (err: any) {
+      toast({ title: "Submission failed", description: err.message || "Please try again later", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const DetailSection = ({ label, value }: { label: string; value: string | null | undefined }) => {
     if (!value) return null;
@@ -183,13 +251,46 @@ export default function Careers() {
                   <option>Other</option>
                 </select>
               </div>
+
+              {/* CV Upload */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5">CV / Resume (PDF or Word, max 10MB)</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                {cvFile ? (
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-cyan-brand/30 bg-cyan-brand/5">
+                    <FileText className="w-5 h-5 text-cyan-brand flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{cvFile.name}</p>
+                      <p className="text-xs text-muted-foreground">{(cvFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <button type="button" onClick={() => { setCvFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => fileInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-border hover:border-cyan-brand/40 bg-card text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    <Upload className="w-4 h-4" />
+                    Click to upload your CV
+                  </button>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1.5">Cover Letter / Message *</label>
                 <textarea name="message" required value={form.message} onChange={handle} rows={5} placeholder="Tell us about yourself..."
                   className="w-full px-4 py-2.5 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-ring resize-none" />
               </div>
-              <button type="submit" className="w-full py-3 gradient-brand text-primary-foreground font-heading font-semibold rounded-lg hover:opacity-90 transition-opacity shadow-glow">
-                Submit Application
+              <button type="submit" disabled={submitting}
+                className="w-full py-3 gradient-brand text-primary-foreground font-heading font-semibold rounded-lg hover:opacity-90 transition-opacity shadow-glow disabled:opacity-60 flex items-center justify-center gap-2">
+                {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit Application"}
               </button>
             </form>
           )}

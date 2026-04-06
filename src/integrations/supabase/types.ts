@@ -240,6 +240,53 @@ export type Database = {
           },
         ]
       }
+      job_applications: {
+        Row: {
+          applicant_email: string
+          applicant_name: string
+          cover_message: string | null
+          created_at: string
+          cv_url: string | null
+          id: string
+          position: string | null
+          status: string
+          updated_at: string
+          vacancy_id: string | null
+        }
+        Insert: {
+          applicant_email: string
+          applicant_name: string
+          cover_message?: string | null
+          created_at?: string
+          cv_url?: string | null
+          id?: string
+          position?: string | null
+          status?: string
+          updated_at?: string
+          vacancy_id?: string | null
+        }
+        Update: {
+          applicant_email?: string
+          applicant_name?: string
+          cover_message?: string | null
+          created_at?: string
+          cv_url?: string | null
+          id?: string
+          position?: string | null
+          status?: string
+          updated_at?: string
+          vacancy_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_applications_vacancy_id_fkey"
+            columns: ["vacancy_id"]
+            isOneToOne: false
+            referencedRelation: "job_vacancies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_vacancies: {
         Row: {
           author_id: string
