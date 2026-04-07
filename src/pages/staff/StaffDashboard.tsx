@@ -25,7 +25,7 @@ const REACTIONS = [
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.4 } }) };
 
 export default function StaffDashboard() {
-  const { profile, roles, isExecutive, isCeo } = useAuth();
+  const { user, profile, roles, isExecutive, isCeo } = useAuth();
   const [stats, setStats] = useState({ plans: 0, projects: 0, notifications: 0, points: 0, tickets: 0, attendance: 0 });
   const [recentPlans, setRecentPlans] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
