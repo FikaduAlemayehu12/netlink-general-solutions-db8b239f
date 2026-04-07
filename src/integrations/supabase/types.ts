@@ -47,6 +47,70 @@ export type Database = {
         }
         Relationships: []
       }
+      announcement_comments: {
+        Row: {
+          announcement_id: string
+          author_id: string
+          content: string
+          created_at: string | null
+          id: string
+        }
+        Insert: {
+          announcement_id: string
+          author_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+        }
+        Update: {
+          announcement_id?: string
+          author_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_comments_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_reactions: {
+        Row: {
+          announcement_id: string
+          created_at: string | null
+          id: string
+          reaction: string
+          user_id: string
+        }
+        Insert: {
+          announcement_id: string
+          created_at?: string | null
+          id?: string
+          reaction: string
+          user_id: string
+        }
+        Update: {
+          announcement_id?: string
+          created_at?: string | null
+          id?: string
+          reaction?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_reactions_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           author_id: string
@@ -1217,6 +1281,54 @@ export type Database = {
           },
         ]
       }
+      site_content: {
+        Row: {
+          attachment_urls: string[] | null
+          audience: string
+          author_id: string
+          client_company: string | null
+          client_name: string | null
+          content: string | null
+          content_type: string
+          created_at: string | null
+          id: string
+          rating: number | null
+          status: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          attachment_urls?: string[] | null
+          audience?: string
+          author_id: string
+          client_company?: string | null
+          client_name?: string | null
+          content?: string | null
+          content_type?: string
+          created_at?: string | null
+          id?: string
+          rating?: number | null
+          status?: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          attachment_urls?: string[] | null
+          audience?: string
+          author_id?: string
+          client_company?: string | null
+          client_name?: string | null
+          content?: string | null
+          content_type?: string
+          created_at?: string | null
+          id?: string
+          rating?: number | null
+          status?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       staff_permissions: {
         Row: {
           can_create_staff: boolean
@@ -1471,6 +1583,24 @@ export type Database = {
         }
         Relationships: []
       }
+      visitor_log: {
+        Row: {
+          created_at: string | null
+          id: string
+          visitor_hash: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          visitor_hash: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          visitor_hash?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1485,6 +1615,7 @@ export type Database = {
       }
       is_ceo: { Args: { _user_id: string }; Returns: boolean }
       is_executive: { Args: { _user_id: string }; Returns: boolean }
+      track_visitor: { Args: { p_hash: string }; Returns: number }
     }
     Enums: {
       app_role:
