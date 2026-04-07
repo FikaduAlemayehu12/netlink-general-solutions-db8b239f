@@ -39,6 +39,8 @@ import SalaryPage from "./pages/staff/SalaryPage";
 import ActivityLogPage from "./pages/staff/ActivityLogPage";
 import RecycleBinPage from "./pages/staff/RecycleBinPage";
 import VacanciesPage from "./pages/staff/VacanciesPage";
+import ApplicationsPage from "./pages/staff/ApplicationsPage";
+import SiteContentPage from "./pages/staff/SiteContentPage";
 
 const queryClient = new QueryClient();
 
@@ -93,6 +95,8 @@ const App = () => (
             <Route path="/staff/activity-log" element={<StaffGuard><ActivityLogPage /></StaffGuard>} />
             <Route path="/staff/recycle-bin" element={<StaffGuard><RecycleBinPage /></StaffGuard>} />
             <Route path="/staff/vacancies" element={<StaffGuard><VacanciesPage /></StaffGuard>} />
+            <Route path="/staff/applications" element={<StaffGuard><ApplicationsPage /></StaffGuard>} />
+            <Route path="/staff/site-content" element={<StaffGuard><SiteContentPage /></StaffGuard>} />
 
             {/* Legacy routes */}
             <Route path="/admin/users" element={<StaffGuard><AdminUsers /></StaffGuard>} />

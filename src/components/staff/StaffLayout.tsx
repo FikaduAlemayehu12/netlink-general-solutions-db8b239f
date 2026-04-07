@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Network, LayoutDashboard, FileText, Users, Trophy, FolderKanban,
-  Bell, Settings, LogOut, Menu, X, ChevronDown, User, Ticket, Clock, Megaphone, MessageSquare, Wallet, Activity, Trash2, Briefcase
+  Bell, Settings, LogOut, Menu, X, ChevronDown, User, Ticket, Clock, Megaphone, MessageSquare, Wallet, Activity, Trash2, Briefcase, Newspaper, ClipboardList
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +25,8 @@ const navItems = [
 const adminItems = [
   { label: "User Management", path: "/staff/admin/users", icon: Users },
   { label: "Job Vacancies", path: "/staff/vacancies", icon: Briefcase },
+  { label: "Applications", path: "/staff/applications", icon: ClipboardList },
+  { label: "Site Content", path: "/staff/site-content", icon: Newspaper },
   { label: "Activity Log", path: "/staff/activity-log", icon: Activity },
   { label: "Recycle Bin", path: "/staff/recycle-bin", icon: Trash2 },
 ];

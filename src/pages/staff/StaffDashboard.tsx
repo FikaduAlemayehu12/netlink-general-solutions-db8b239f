@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { FileText, Trophy, FolderKanban, Bell, TrendingUp, Plus, Award, Ticket, Clock, Megaphone, Users, Send, X, AlertTriangle } from "lucide-react";
+import { FileText, Trophy, FolderKanban, Bell, TrendingUp, Plus, Award, Ticket, Clock, Megaphone, Users, Send, X, AlertTriangle, ThumbsUp, Heart, Laugh, Frown, ThumbsDown, MessageSquare } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,13 +9,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import StaffLayout from "@/components/staff/StaffLayout";
 import OverdueMilestonesWidget from "@/components/staff/OverdueMilestonesWidget";
+
+const REACTIONS = [
+  { emoji: "👍", label: "Like" },
+  { emoji: "❤️", label: "Love" },
+  { emoji: "😂", label: "Haha" },
+  { emoji: "😮", label: "Wow" },
+  { emoji: "😢", label: "Sad" },
+  { emoji: "👎", label: "Dislike" },
+];
 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.4 } }) };
 
 export default function StaffDashboard() {
-  const { profile, roles, isExecutive, isCeo } = useAuth();
+  const { user, profile, roles, isExecutive, isCeo } = useAuth();
   const [stats, setStats] = useState({ plans: 0, projects: 0, notifications: 0, points: 0, tickets: 0, attendance: 0 });
   const [recentPlans, setRecentPlans] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -23,8 +34,13 @@ export default function StaffDashboard() {
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [announcementForm, setAnnouncementForm] = useState({ title: "", content: "", priority: "normal", pinned: false });
   const [posting, setPosting] = useState(false);
-  // Performance scores
   const [perfScores, setPerfScores] = useState({ daily: 0, weekly: 0, quarterly: 0 });
+  // Announcement detail state
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<any>(null);
+  const [annReactions, setAnnReactions] = useState<any[]>([]);
+  const [annComments, setAnnComments] = useState<any[]>([]);
+  const [annComment, setAnnComment] = useState("");
+  const [annProfiles, setAnnProfiles] = useState<Record<string, string>>({});
 
   const currentQuarter = () => {
     const now = new Date();
@@ -89,6 +105,41 @@ export default function StaffDashboard() {
     };
     load();
   }, []);
+
+  // Announcement detail helpers
+  const openAnnouncement = async (a: any) => {
+    setSelectedAnnouncement(a);
+    // Load profiles map
+    const { data: profs } = await supabase.from("profiles").select("user_id, full_name");
+    const map: Record<string, string> = {};
+    for (const p of profs || []) map[p.user_id] = p.full_name;
+    setAnnProfiles(map);
+    // Load reactions
+    const { data: rxns } = await supabase.from("announcement_reactions" as any).select("*").eq("announcement_id", a.id);
+    setAnnReactions((rxns || []) as any);
+    // Load comments
+    const { data: cmts } = await supabase.from("announcement_comments" as any).select("*").eq("announcement_id", a.id).order("created_at", { ascending: true });
+    setAnnComments((cmts || []) as any);
+  };
+
+  const toggleAnnReaction = async (emoji: string) => {
+    if (!selectedAnnouncement || !user) return;
+    const existing = annReactions.find((r: any) => r.user_id === user.id && r.reaction === emoji);
+    if (existing) {
+      await supabase.from("announcement_reactions" as any).delete().eq("id", existing.id);
+      setAnnReactions(annReactions.filter((r: any) => r.id !== existing.id));
+    } else {
+      const { data } = await supabase.from("announcement_reactions" as any).insert({ announcement_id: selectedAnnouncement.id, user_id: user.id, reaction: emoji }).select().single();
+      if (data) setAnnReactions([...annReactions, data as any]);
+    }
+  };
+
+  const postAnnComment = async () => {
+    if (!annComment.trim() || !selectedAnnouncement || !user) return;
+    const { data } = await supabase.from("announcement_comments" as any).insert({ announcement_id: selectedAnnouncement.id, author_id: user.id, content: annComment.trim() }).select().single();
+    if (data) setAnnComments([...annComments, data as any]);
+    setAnnComment("");
+  };
 
   const postAnnouncement = async () => {
     if (!announcementForm.title.trim() || !announcementForm.content.trim()) return;
@@ -273,14 +324,17 @@ export default function StaffDashboard() {
 
                 {announcements.length === 0 && <p className="text-muted-foreground text-sm text-center py-4">No announcements</p>}
                 {announcements.map((a) => (
-                  <div key={a.id} className="p-3 rounded-lg bg-muted/50">
+                  <div key={a.id} className="p-3 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors" onClick={() => openAnnouncement(a)}>
                     <div className="flex items-center gap-2">
                       {a.pinned && <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px]">Pinned</Badge>}
                       {a.priority === "urgent" && <Badge variant="destructive" className="text-[10px]">Urgent</Badge>}
                       <span className="text-sm font-heading font-semibold text-foreground">{a.title}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{a.content}</p>
-                    <div className="text-[10px] text-muted-foreground mt-1.5">{a.profiles?.full_name} · {new Date(a.created_at).toLocaleDateString()}</div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <div className="text-[10px] text-muted-foreground">{a.profiles?.full_name} · {new Date(a.created_at).toLocaleDateString()}</div>
+                      <MessageSquare className="w-3 h-3 text-muted-foreground" />
+                    </div>
                   </div>
                 ))}
               </CardContent>
@@ -361,6 +415,83 @@ export default function StaffDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Announcement Detail Dialog */}
+      <Dialog open={!!selectedAnnouncement} onOpenChange={o => { if (!o) setSelectedAnnouncement(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {selectedAnnouncement && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-heading flex items-center gap-2">
+                  <Megaphone className="w-5 h-5 text-primary" /> {selectedAnnouncement.title}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedAnnouncement.pinned && <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">Pinned</Badge>}
+                  {selectedAnnouncement.priority === "urgent" && <Badge variant="destructive" className="text-xs">Urgent</Badge>}
+                  {selectedAnnouncement.priority === "high" && <Badge className="bg-gold/10 text-gold text-xs">High Priority</Badge>}
+                  <span className="text-xs text-muted-foreground">by {selectedAnnouncement.profiles?.full_name} · {new Date(selectedAnnouncement.created_at).toLocaleDateString()}</span>
+                </div>
+
+                <div className="p-4 rounded-lg bg-muted/50 text-sm whitespace-pre-wrap leading-relaxed">{selectedAnnouncement.content}</div>
+
+                {/* Reactions */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {REACTIONS.map(r => {
+                    const reactors = annReactions.filter((rx: any) => rx.reaction === r.emoji);
+                    const myReaction = reactors.find((rx: any) => rx.user_id === user?.id);
+                    return (
+                      <Tooltip key={r.emoji}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => toggleAnnReaction(r.emoji)}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs border transition-all ${myReaction ? "border-primary bg-primary/10" : "border-border hover:border-primary/30 bg-card"}`}
+                          >
+                            <span>{r.emoji}</span>
+                            {reactors.length > 0 && <span className="font-medium">{reactors.length}</span>}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">{r.label}{reactors.length > 0 && `: ${reactors.map((rx: any) => annProfiles[rx.user_id] || "Unknown").join(", ")}`}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+
+                {/* Comments */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Comments ({annComments.length})</p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {annComments.map((c: any) => (
+                      <div key={c.id} className="flex gap-2 p-2 rounded-lg bg-muted/30">
+                        <div className="w-6 h-6 rounded-full gradient-brand flex items-center justify-center flex-shrink-0 text-primary-foreground text-[10px] font-bold">
+                          {(annProfiles[c.author_id] || "?").charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold">{annProfiles[c.author_id] || "Unknown"}</span>
+                            <span className="text-[10px] text-muted-foreground">{new Date(c.created_at).toLocaleString()}</span>
+                          </div>
+                          <p className="text-sm mt-0.5">{c.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <Input value={annComment} onChange={e => setAnnComment(e.target.value)} placeholder="Write a comment..."
+                      onKeyDown={e => e.key === "Enter" && postAnnComment()} className="flex-1" />
+                    <Button size="sm" onClick={postAnnComment} disabled={!annComment.trim()} className="gradient-brand text-primary-foreground gap-1">
+                      <Send className="w-3 h-3" /> Send
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </StaffLayout>
   );
 }
