@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Network, Phone, Mail, MapPin, Facebook, MessageCircle, Linkedin, Instagram, Send } from "lucide-react";
+import VisitorCounter from "./VisitorCounter";
 
 export default function Footer() {
   return (
@@ -101,7 +102,10 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 pt-6 border-t border-primary-foreground/10 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-primary-foreground/50">
-          <span>© 2025 Netlink General Solutions. All rights reserved.</span>
+          <div className="flex items-center gap-4">
+            <span>© 2025 Netlink General Solutions. All rights reserved.</span>
+            <VisitorCounter />
+          </div>
           <div className="flex gap-4 flex-wrap justify-center">
             <Link to="/privacy" className="hover:text-cyan-brand transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-cyan-brand transition-colors">Terms of Service</Link>
