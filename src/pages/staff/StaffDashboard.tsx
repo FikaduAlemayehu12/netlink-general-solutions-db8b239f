@@ -141,7 +141,7 @@ export default function StaffDashboard() {
     setAnnComment("");
   };
 
-
+  const postAnnouncement = async () => {
     if (!announcementForm.title.trim() || !announcementForm.content.trim()) return;
     setPosting(true);
     const { data: { user } } = await supabase.auth.getUser();
