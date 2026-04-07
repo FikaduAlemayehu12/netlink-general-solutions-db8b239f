@@ -415,6 +415,83 @@ export default function StaffDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Announcement Detail Dialog */}
+      <Dialog open={!!selectedAnnouncement} onOpenChange={o => { if (!o) setSelectedAnnouncement(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {selectedAnnouncement && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-heading flex items-center gap-2">
+                  <Megaphone className="w-5 h-5 text-primary" /> {selectedAnnouncement.title}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedAnnouncement.pinned && <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">Pinned</Badge>}
+                  {selectedAnnouncement.priority === "urgent" && <Badge variant="destructive" className="text-xs">Urgent</Badge>}
+                  {selectedAnnouncement.priority === "high" && <Badge className="bg-gold/10 text-gold text-xs">High Priority</Badge>}
+                  <span className="text-xs text-muted-foreground">by {selectedAnnouncement.profiles?.full_name} · {new Date(selectedAnnouncement.created_at).toLocaleDateString()}</span>
+                </div>
+
+                <div className="p-4 rounded-lg bg-muted/50 text-sm whitespace-pre-wrap leading-relaxed">{selectedAnnouncement.content}</div>
+
+                {/* Reactions */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {REACTIONS.map(r => {
+                    const reactors = annReactions.filter((rx: any) => rx.reaction === r.emoji);
+                    const myReaction = reactors.find((rx: any) => rx.user_id === user?.id);
+                    return (
+                      <Tooltip key={r.emoji}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => toggleAnnReaction(r.emoji)}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs border transition-all ${myReaction ? "border-primary bg-primary/10" : "border-border hover:border-primary/30 bg-card"}`}
+                          >
+                            <span>{r.emoji}</span>
+                            {reactors.length > 0 && <span className="font-medium">{reactors.length}</span>}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">{r.label}{reactors.length > 0 && `: ${reactors.map((rx: any) => annProfiles[rx.user_id] || "Unknown").join(", ")}`}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+
+                {/* Comments */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Comments ({annComments.length})</p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {annComments.map((c: any) => (
+                      <div key={c.id} className="flex gap-2 p-2 rounded-lg bg-muted/30">
+                        <div className="w-6 h-6 rounded-full gradient-brand flex items-center justify-center flex-shrink-0 text-primary-foreground text-[10px] font-bold">
+                          {(annProfiles[c.author_id] || "?").charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold">{annProfiles[c.author_id] || "Unknown"}</span>
+                            <span className="text-[10px] text-muted-foreground">{new Date(c.created_at).toLocaleString()}</span>
+                          </div>
+                          <p className="text-sm mt-0.5">{c.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <Input value={annComment} onChange={e => setAnnComment(e.target.value)} placeholder="Write a comment..."
+                      onKeyDown={e => e.key === "Enter" && postAnnComment()} className="flex-1" />
+                    <Button size="sm" onClick={postAnnComment} disabled={!annComment.trim()} className="gradient-brand text-primary-foreground gap-1">
+                      <Send className="w-3 h-3" /> Send
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </StaffLayout>
   );
 }
