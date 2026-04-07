@@ -106,7 +106,42 @@ export default function StaffDashboard() {
     load();
   }, []);
 
-  const postAnnouncement = async () => {
+  // Announcement detail helpers
+  const openAnnouncement = async (a: any) => {
+    setSelectedAnnouncement(a);
+    // Load profiles map
+    const { data: profs } = await supabase.from("profiles").select("user_id, full_name");
+    const map: Record<string, string> = {};
+    for (const p of profs || []) map[p.user_id] = p.full_name;
+    setAnnProfiles(map);
+    // Load reactions
+    const { data: rxns } = await supabase.from("announcement_reactions" as any).select("*").eq("announcement_id", a.id);
+    setAnnReactions((rxns || []) as any);
+    // Load comments
+    const { data: cmts } = await supabase.from("announcement_comments" as any).select("*").eq("announcement_id", a.id).order("created_at", { ascending: true });
+    setAnnComments((cmts || []) as any);
+  };
+
+  const toggleAnnReaction = async (emoji: string) => {
+    if (!selectedAnnouncement || !user) return;
+    const existing = annReactions.find((r: any) => r.user_id === user.id && r.reaction === emoji);
+    if (existing) {
+      await supabase.from("announcement_reactions" as any).delete().eq("id", existing.id);
+      setAnnReactions(annReactions.filter((r: any) => r.id !== existing.id));
+    } else {
+      const { data } = await supabase.from("announcement_reactions" as any).insert({ announcement_id: selectedAnnouncement.id, user_id: user.id, reaction: emoji }).select().single();
+      if (data) setAnnReactions([...annReactions, data as any]);
+    }
+  };
+
+  const postAnnComment = async () => {
+    if (!annComment.trim() || !selectedAnnouncement || !user) return;
+    const { data } = await supabase.from("announcement_comments" as any).insert({ announcement_id: selectedAnnouncement.id, author_id: user.id, content: annComment.trim() }).select().single();
+    if (data) setAnnComments([...annComments, data as any]);
+    setAnnComment("");
+  };
+
+
     if (!announcementForm.title.trim() || !announcementForm.content.trim()) return;
     setPosting(true);
     const { data: { user } } = await supabase.auth.getUser();
