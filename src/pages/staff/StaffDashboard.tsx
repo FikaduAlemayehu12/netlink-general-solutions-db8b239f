@@ -324,14 +324,17 @@ export default function StaffDashboard() {
 
                 {announcements.length === 0 && <p className="text-muted-foreground text-sm text-center py-4">No announcements</p>}
                 {announcements.map((a) => (
-                  <div key={a.id} className="p-3 rounded-lg bg-muted/50">
+                  <div key={a.id} className="p-3 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors" onClick={() => openAnnouncement(a)}>
                     <div className="flex items-center gap-2">
                       {a.pinned && <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px]">Pinned</Badge>}
                       {a.priority === "urgent" && <Badge variant="destructive" className="text-[10px]">Urgent</Badge>}
                       <span className="text-sm font-heading font-semibold text-foreground">{a.title}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{a.content}</p>
-                    <div className="text-[10px] text-muted-foreground mt-1.5">{a.profiles?.full_name} · {new Date(a.created_at).toLocaleDateString()}</div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <div className="text-[10px] text-muted-foreground">{a.profiles?.full_name} · {new Date(a.created_at).toLocaleDateString()}</div>
+                      <MessageSquare className="w-3 h-3 text-muted-foreground" />
+                    </div>
                   </div>
                 ))}
               </CardContent>
