@@ -34,8 +34,13 @@ export default function StaffDashboard() {
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [announcementForm, setAnnouncementForm] = useState({ title: "", content: "", priority: "normal", pinned: false });
   const [posting, setPosting] = useState(false);
-  // Performance scores
   const [perfScores, setPerfScores] = useState({ daily: 0, weekly: 0, quarterly: 0 });
+  // Announcement detail state
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<any>(null);
+  const [annReactions, setAnnReactions] = useState<any[]>([]);
+  const [annComments, setAnnComments] = useState<any[]>([]);
+  const [annComment, setAnnComment] = useState("");
+  const [annProfiles, setAnnProfiles] = useState<Record<string, string>>({});
 
   const currentQuarter = () => {
     const now = new Date();
