@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { FileText, Trophy, FolderKanban, Bell, TrendingUp, Plus, Award, Ticket, Clock, Megaphone, Users, Send, X, AlertTriangle } from "lucide-react";
+import { FileText, Trophy, FolderKanban, Bell, TrendingUp, Plus, Award, Ticket, Clock, Megaphone, Users, Send, X, AlertTriangle, ThumbsUp, Heart, Laugh, Frown, ThumbsDown, MessageSquare } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,8 +9,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import StaffLayout from "@/components/staff/StaffLayout";
 import OverdueMilestonesWidget from "@/components/staff/OverdueMilestonesWidget";
+
+const REACTIONS = [
+  { emoji: "👍", label: "Like" },
+  { emoji: "❤️", label: "Love" },
+  { emoji: "😂", label: "Haha" },
+  { emoji: "😮", label: "Wow" },
+  { emoji: "😢", label: "Sad" },
+  { emoji: "👎", label: "Dislike" },
+];
 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.4 } }) };
 
