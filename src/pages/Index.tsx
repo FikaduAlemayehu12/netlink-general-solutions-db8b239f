@@ -75,6 +75,20 @@ const fadeUp = {
 };
 
 export default function Index() {
+  const [testimonials, setTestimonials] = useState<SiteContent[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("site_content" as any)
+      .select("*")
+      .eq("status", "published")
+      .eq("content_type", "testimonial")
+      .in("audience", ["client", "both"])
+      .order("created_at", { ascending: false })
+      .limit(6)
+      .then(({ data }) => setTestimonials((data || []) as SiteContent[]));
+  }, []);
+
   return (
     <main className="min-h-screen">
       {/* Hero */}
