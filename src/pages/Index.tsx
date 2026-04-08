@@ -1,10 +1,23 @@
 import heroBg from "@/assets/hero-bg.jpg";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Network, Shield, Server, Cpu, ChevronRight, Phone, ArrowRight,
-  Users, Award, Globe, CheckCircle, Wifi, Building2, BarChart3,
+  Users, Award, Globe, CheckCircle, Wifi, Building2, BarChart3, Star,
 } from "lucide-react";
+
+interface SiteContent {
+  id: string;
+  content_type: string;
+  title: string;
+  content: string | null;
+  attachment_urls: string[];
+  client_name: string | null;
+  client_company: string | null;
+  rating: number | null;
+}
 
 const stats = [
   { value: "20+", label: "Certified Engineers", icon: Users },
