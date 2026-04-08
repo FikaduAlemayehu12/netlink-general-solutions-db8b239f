@@ -1,10 +1,23 @@
 import heroBg from "@/assets/hero-bg.jpg";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Network, Shield, Server, Cpu, ChevronRight, Phone, ArrowRight,
-  Users, Award, Globe, CheckCircle, Wifi, Building2, BarChart3,
+  Users, Award, Globe, CheckCircle, Wifi, Building2, BarChart3, Star,
 } from "lucide-react";
+
+interface SiteContent {
+  id: string;
+  content_type: string;
+  title: string;
+  content: string | null;
+  attachment_urls: string[];
+  client_name: string | null;
+  client_company: string | null;
+  rating: number | null;
+}
 
 const stats = [
   { value: "20+", label: "Certified Engineers", icon: Users },
@@ -62,6 +75,20 @@ const fadeUp = {
 };
 
 export default function Index() {
+  const [testimonials, setTestimonials] = useState<SiteContent[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("site_content" as any)
+      .select("*")
+      .eq("status", "published")
+      .eq("content_type", "testimonial")
+      .in("audience", ["client", "both"])
+      .order("created_at", { ascending: false })
+      .limit(6)
+      .then(({ data }) => setTestimonials((data || []) as SiteContent[]));
+  }, []);
+
   return (
     <main className="min-h-screen">
       {/* Hero */}
@@ -239,7 +266,42 @@ export default function Index() {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* Client Testimonials */}
+      {testimonials.length > 0 && (
+        <section className="py-16 bg-background">
+          <div className="container mx-auto px-4">
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
+              <div className="inline-block px-3 py-1 bg-gold/10 text-gold text-xs tracking-widest uppercase rounded-full mb-3">
+                What Our Clients Say
+              </div>
+              <h2 className="font-heading font-bold text-4xl md:text-5xl text-foreground mb-4">Client Testimonials</h2>
+            </motion.div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {testimonials.map((item, i) => (
+                <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }} transition={{ delay: i * 0.08 }}
+                  className="bg-card rounded-xl border border-border shadow-card p-6 flex flex-col hover:border-gold/30 transition-all">
+                  {item.rating && <div className="text-gold text-sm mb-3">{"⭐".repeat(item.rating)}</div>}
+                  <blockquote className="text-sm text-foreground/80 italic leading-relaxed flex-1 mb-4">
+                    "{item.content || item.title}"
+                  </blockquote>
+                  <div className="flex items-center gap-3 pt-3 border-t border-border">
+                    <div className="w-9 h-9 rounded-full gradient-brand flex items-center justify-center text-primary-foreground font-heading font-bold text-xs">
+                      {(item.client_name || "C").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-heading font-semibold text-sm">{item.client_name || "Client"}</p>
+                      {item.client_company && <p className="text-xs text-muted-foreground">{item.client_company}</p>}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+
       <section className="py-16 bg-background">
         <div className="container mx-auto px-4 text-center">
           <motion.div

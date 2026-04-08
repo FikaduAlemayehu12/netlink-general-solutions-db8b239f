@@ -36,6 +36,37 @@ const STATUS_COLORS: Record<string, string> = {
   hired: "bg-green-500/10 text-green-600",
 };
 
+/** Extract the storage path from a full Supabase public URL */
+function extractStoragePath(url: string, bucket: string): string | null {
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  return decodeURIComponent(url.substring(idx + marker.length));
+}
+
+/** Download a file from Supabase storage via JS client (avoids ad-blocker issues) */
+async function downloadFileFromStorage(publicUrl: string, bucket: string, fallbackName: string) {
+  const path = extractStoragePath(publicUrl, bucket);
+  if (!path) {
+    // Fallback: open in new tab
+    window.open(publicUrl, "_blank");
+    return;
+  }
+  const { data, error } = await supabase.storage.from(bucket).download(path);
+  if (error || !data) {
+    window.open(publicUrl, "_blank");
+    return;
+  }
+  const blobUrl = URL.createObjectURL(data);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = path.split("/").pop() || fallbackName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+}
+
 export default function ApplicationsPage() {
   const { isCeo, isExecutive } = useAuth();
   const { toast } = useToast();
@@ -49,6 +80,7 @@ export default function ApplicationsPage() {
   const [replyMessage, setReplyMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [vacancyTitles, setVacancyTitles] = useState<Record<string, string>>({});
+  const [downloading, setDownloading] = useState(false);
 
   const load = async () => {
     const { data } = await supabase.from("job_applications").select("*").order("created_at", { ascending: false });
@@ -70,6 +102,33 @@ export default function ApplicationsPage() {
     toast({ title: `Status updated to ${newStatus}` });
     load();
     if (selected?.id === app.id) setSelected({ ...app, status: newStatus });
+  };
+
+  const handleDownloadCv = async (cvUrl: string) => {
+    setDownloading(true);
+    try {
+      await downloadFileFromStorage(cvUrl, "job-applications", "cv-document");
+    } catch {
+      window.open(cvUrl, "_blank");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleViewCv = async (cvUrl: string) => {
+    // For viewing, download and open blob URL in new tab
+    const path = extractStoragePath(cvUrl, "job-applications");
+    if (!path) {
+      window.open(cvUrl, "_blank");
+      return;
+    }
+    const { data, error } = await supabase.storage.from("job-applications").download(path);
+    if (error || !data) {
+      window.open(cvUrl, "_blank");
+      return;
+    }
+    const blobUrl = URL.createObjectURL(data);
+    window.open(blobUrl, "_blank");
   };
 
   const sendReply = async () => {
@@ -239,16 +298,14 @@ export default function ApplicationsPage() {
                       <div className="flex-1">
                         <p className="text-sm font-medium">Attached Document</p>
                       </div>
-                      <a href={selected.cv_url} target="_blank" rel="noopener noreferrer">
-                        <Button size="sm" variant="outline" className="gap-1.5">
-                          <Download className="w-3.5 h-3.5" /> Download
-                        </Button>
-                      </a>
-                      <a href={selected.cv_url} target="_blank" rel="noopener noreferrer">
-                        <Button size="sm" variant="outline" className="gap-1.5">
-                          <ExternalLink className="w-3.5 h-3.5" /> View
-                        </Button>
-                      </a>
+                      <Button size="sm" variant="outline" className="gap-1.5" disabled={downloading}
+                        onClick={() => handleDownloadCv(selected.cv_url!)}>
+                        {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Download
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1.5"
+                        onClick={() => handleViewCv(selected.cv_url!)}>
+                        <ExternalLink className="w-3.5 h-3.5" /> View
+                      </Button>
                     </div>
                   </div>
                 )}

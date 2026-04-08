@@ -1,8 +1,25 @@
 import { motion } from "framer-motion";
-import { Calendar, User, ArrowRight, Tag } from "lucide-react";
+import { Calendar, User, ArrowRight, Tag, Star, Image as ImageIcon, Newspaper } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
 
-const posts = [
+interface SiteContent {
+  id: string;
+  content_type: string;
+  title: string;
+  content: string | null;
+  attachment_urls: string[];
+  audience: string;
+  status: string;
+  client_name: string | null;
+  client_company: string | null;
+  rating: number | null;
+  created_at: string;
+}
+
+const staticPosts = [
   {
     title: "The Future of Enterprise Networking in Ethiopia",
     excerpt: "As Ethiopia rapidly digitizes, enterprise networking is becoming the backbone of modern business operations. SDN and WLAN solutions are leading the charge.",
@@ -62,7 +79,28 @@ const catColors: Record<string, string> = {
   "Company News": "bg-secondary text-secondary-foreground",
 };
 
+const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
+
 export default function Blog() {
+  const [news, setNews] = useState<SiteContent[]>([]);
+  const [testimonials, setTestimonials] = useState<SiteContent[]>([]);
+  const [gallery, setGallery] = useState<SiteContent[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("site_content" as any)
+      .select("*")
+      .eq("status", "published")
+      .in("audience", ["client", "both"])
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        const items = (data || []) as SiteContent[];
+        setNews(items.filter(i => i.content_type === "news"));
+        setTestimonials(items.filter(i => i.content_type === "testimonial"));
+        setGallery(items.filter(i => i.content_type === "gallery"));
+      });
+  }, []);
+
   return (
     <main className="min-h-screen pt-16">
       {/* Hero */}
@@ -81,11 +119,108 @@ export default function Blog() {
         </div>
       </section>
 
-      {/* Posts */}
-      <section className="py-20 bg-background">
+      {/* Published News from CMS */}
+      {news.length > 0 && (
+        <section className="py-16 bg-background">
+          <div className="container mx-auto px-4">
+            <div className="flex items-center gap-2 mb-8">
+              <Newspaper className="w-5 h-5 text-cyan-brand" />
+              <h2 className="font-heading font-bold text-3xl">Latest News</h2>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {news.map((item, i) => {
+                const cover = (item.attachment_urls || []).find(isImage);
+                return (
+                  <motion.article key={item.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }} transition={{ delay: i * 0.06 }}
+                    className="bg-card rounded-xl border border-border shadow-card hover:border-cyan-brand/30 transition-all overflow-hidden flex flex-col">
+                    {cover && (
+                      <div className="h-44 overflow-hidden">
+                        <img src={cover} alt={item.title} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="p-5 flex flex-col flex-1">
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-cyan-brand/10 text-cyan-brand w-fit mb-2">
+                        <Tag className="w-2.5 h-2.5" /> News
+                      </span>
+                      <h3 className="font-heading font-bold text-lg mb-2 leading-snug">{item.title}</h3>
+                      {item.content && <p className="text-muted-foreground text-sm leading-relaxed flex-1 mb-3 line-clamp-3">{item.content}</p>}
+                      <div className="text-xs text-muted-foreground flex items-center gap-2">
+                        <Calendar className="w-3 h-3" />
+                        {format(new Date(item.created_at), "MMMM d, yyyy")}
+                      </div>
+                    </div>
+                  </motion.article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Client Testimonials */}
+      {testimonials.length > 0 && (
+        <section className="py-16 bg-secondary/40">
+          <div className="container mx-auto px-4">
+            <div className="flex items-center gap-2 mb-8">
+              <Star className="w-5 h-5 text-gold" />
+              <h2 className="font-heading font-bold text-3xl">Client Testimonials</h2>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {testimonials.map((item, i) => (
+                <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }} transition={{ delay: i * 0.06 }}
+                  className="bg-card rounded-xl border border-border shadow-card p-6 flex flex-col">
+                  {item.rating && (
+                    <div className="text-gold text-sm mb-3">{"⭐".repeat(item.rating)}</div>
+                  )}
+                  <blockquote className="text-sm text-foreground/80 italic leading-relaxed flex-1 mb-4">
+                    "{item.content || item.title}"
+                  </blockquote>
+                  <div className="flex items-center gap-3 pt-3 border-t border-border">
+                    <div className="w-9 h-9 rounded-full gradient-brand flex items-center justify-center text-primary-foreground font-heading font-bold text-xs">
+                      {(item.client_name || "C").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-heading font-semibold text-sm">{item.client_name || "Client"}</p>
+                      {item.client_company && <p className="text-xs text-muted-foreground">{item.client_company}</p>}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Gallery */}
+      {gallery.length > 0 && (
+        <section className="py-16 bg-background">
+          <div className="container mx-auto px-4">
+            <div className="flex items-center gap-2 mb-8">
+              <ImageIcon className="w-5 h-5 text-cyan-brand" />
+              <h2 className="font-heading font-bold text-3xl">Gallery</h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {gallery.flatMap(item => 
+                (item.attachment_urls || []).filter(isImage).map((url, j) => (
+                  <motion.div key={`${item.id}-${j}`} initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }} className="rounded-xl overflow-hidden border border-border shadow-card group cursor-pointer aspect-square">
+                    <img src={url} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Static Blog Posts */}
+      <section className="py-20 bg-secondary/30">
         <div className="container mx-auto px-4">
+          <h2 className="font-heading font-bold text-3xl mb-8">Blog Articles</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {posts.map(({ title, excerpt, author, date, category, readTime }, i) => (
+            {staticPosts.map(({ title, excerpt, author, date, category, readTime }, i) => (
               <motion.article
                 key={title}
                 initial={{ opacity: 0, y: 30 }}
@@ -94,7 +229,6 @@ export default function Blog() {
                 transition={{ delay: i * 0.08, duration: 0.5 }}
                 className="bg-card rounded-xl border border-border shadow-card hover:border-cyan-brand/30 hover:shadow-glow transition-all group flex flex-col"
               >
-                {/* Category bar */}
                 <div className="h-1.5 rounded-t-xl bg-gradient-to-r from-cyan-brand to-transparent" />
                 <div className="p-6 flex flex-col flex-1">
                   <div className="flex items-center gap-2 mb-3">
