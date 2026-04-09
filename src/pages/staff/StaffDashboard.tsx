@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { FileText, Trophy, FolderKanban, Bell, TrendingUp, Plus, Award, Ticket, Clock, Megaphone, Users, Send, X, AlertTriangle, ThumbsUp, Heart, Laugh, Frown, ThumbsDown, MessageSquare } from "lucide-react";
+import { FileText, Trophy, FolderKanban, Bell, TrendingUp, Plus, Award, Ticket, Clock, Megaphone, Users, Send, X, AlertTriangle, ThumbsUp, Heart, Laugh, Frown, ThumbsDown, MessageSquare, Briefcase, Newspaper, Image } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
