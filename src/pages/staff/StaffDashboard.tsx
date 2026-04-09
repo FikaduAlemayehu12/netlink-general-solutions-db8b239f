@@ -41,6 +41,9 @@ export default function StaffDashboard() {
   const [annComments, setAnnComments] = useState<any[]>([]);
   const [annComment, setAnnComment] = useState("");
   const [annProfiles, setAnnProfiles] = useState<Record<string, string>>({});
+  // New: internal vacancies & site content
+  const [internalVacancies, setInternalVacancies] = useState<any[]>([]);
+  const [staffContent, setStaffContent] = useState<any[]>([]);
 
   const currentQuarter = () => {
     const now = new Date();
