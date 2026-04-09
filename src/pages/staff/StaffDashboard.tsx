@@ -104,6 +104,14 @@ export default function StaffDashboard() {
         quarterly: countApprovals(quarterlyRes.data || []),
       });
 
+      // Load internal vacancies & staff site content
+      const [vacRes, contentRes] = await Promise.all([
+        supabase.from("job_vacancies" as any).select("*").eq("status", "published").in("vacancy_type", ["internal", "external"]).order("created_at", { ascending: false }).limit(5),
+        supabase.from("site_content" as any).select("*").eq("status", "published").in("audience", ["staff", "both"]).order("created_at", { ascending: false }).limit(5),
+      ]);
+      setInternalVacancies(vacRes.data || []);
+      setStaffContent(contentRes.data || []);
+
       setLoading(false);
     };
     load();
