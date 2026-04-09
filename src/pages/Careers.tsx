@@ -1,5 +1,5 @@
-import { motion } from "framer-motion";
-import { Briefcase, Users, Heart, Zap, Calendar, DollarSign, Upload, FileText, X, Loader2, LogIn } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Briefcase, Users, Heart, Zap, Calendar, DollarSign, Upload, FileText, X, Loader2, CheckCircle } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
@@ -41,10 +41,11 @@ export default function Careers() {
   const { toast } = useToast();
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", position: "", message: "" });
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ message: "" });
   const [cvFile, setCvFile] = useState<File | null>(null);
-  const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submittedIds, setSubmittedIds] = useState<Set<string>>(new Set());
   const [signingIn, setSigningIn] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -54,38 +55,35 @@ export default function Careers() {
     supabase.from("job_vacancies" as any).select("*").eq("status", "published").eq("vacancy_type", "external").order("created_at", { ascending: false })
       .then(({ data }) => setVacancies((data || []) as any));
 
-    // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user || null);
-      if (session?.user) {
-        setForm(f => ({
-          ...f,
-          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || f.name,
-          email: session.user.email || f.email,
-        }));
-      }
       setAuthLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
-      if (session?.user) {
-        setForm(f => ({
-          ...f,
-          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || f.name,
-          email: session.user.email || f.email,
-        }));
-      }
+      setAuthLoading(false);
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (vacancyId: string) => {
     setSigningIn(true);
     try {
-      await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.href,
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin + "/careers",
       });
+      if (result.error) {
+        toast({ title: "Sign-in failed", description: String(result.error), variant: "destructive" });
+      }
+      if (result.redirected) {
+        // Browser will redirect — store intended vacancy
+        localStorage.setItem("apply_vacancy_id", vacancyId);
+        return;
+      }
+      // Session set successfully — open apply form
+      setApplyingId(vacancyId);
+      setExpandedId(vacancyId);
     } catch (err: any) {
       toast({ title: "Sign-in failed", description: err.message, variant: "destructive" });
     } finally {
@@ -93,41 +91,53 @@ export default function Careers() {
     }
   };
 
-  const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  // After redirect, auto-open the vacancy the user intended to apply to
+  useEffect(() => {
+    if (user && !authLoading) {
+      const pendingVacancy = localStorage.getItem("apply_vacancy_id");
+      if (pendingVacancy) {
+        localStorage.removeItem("apply_vacancy_id");
+        setExpandedId(pendingVacancy);
+        setApplyingId(pendingVacancy);
+      }
+    }
+  }, [user, authLoading]);
+
+  const handleApplyClick = (vacancyId: string) => {
+    if (!user) {
+      handleGoogleSignIn(vacancyId);
+    } else {
+      setApplyingId(vacancyId);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
+    if (file.size > 10 * 1024 * 1024) {
       toast({ title: "File too large", description: "Maximum file size is 10MB", variant: "destructive" });
       return;
     }
-    const allowed = [".pdf", ".doc", ".docx"];
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-    if (!allowed.includes(ext)) {
+    if (![".pdf", ".doc", ".docx"].includes(ext)) {
       toast({ title: "Invalid file type", description: "Please upload a PDF or Word document", variant: "destructive" });
       return;
     }
     setCvFile(file);
   };
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim() || !form.email.trim() || !form.message.trim()) return;
+  const submitApplication = async (vacancy: Vacancy) => {
+    if (!form.message.trim()) {
+      toast({ title: "Cover letter required", description: "Please write a brief cover letter", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
-
     try {
       let cvUrl: string | null = null;
-
       if (cvFile) {
         const fileExt = cvFile.name.split(".").pop();
         const fileName = `${Date.now()}-${crypto.randomUUID()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from("job-applications")
-          .upload(fileName, cvFile);
+        const { error: uploadError } = await supabase.storage.from("job-applications").upload(fileName, cvFile);
         if (uploadError) {
           toast({ title: "CV upload failed", description: uploadError.message, variant: "destructive" });
           setSubmitting(false);
@@ -137,21 +147,26 @@ export default function Careers() {
         cvUrl = urlData.publicUrl;
       }
 
-      const matchingVacancy = vacancies.find(v => v.title === form.position);
+      const applicantName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "";
+      const applicantEmail = user?.email || "";
 
       const { error } = await supabase.functions.invoke("handle-job-application", {
         body: {
-          applicant_name: form.name.trim(),
-          applicant_email: form.email.trim(),
-          position: form.position || null,
+          applicant_name: applicantName,
+          applicant_email: applicantEmail,
+          position: vacancy.title,
           cover_message: form.message.trim(),
           cv_url: cvUrl,
-          vacancy_id: matchingVacancy?.id || null,
+          vacancy_id: vacancy.id,
         },
       });
-
       if (error) throw error;
-      setSubmitted(true);
+
+      setSubmittedIds(prev => new Set(prev).add(vacancy.id));
+      setApplyingId(null);
+      setForm({ message: "" });
+      setCvFile(null);
+      toast({ title: "Application submitted!", description: "We'll review your application and be in touch soon." });
     } catch (err: any) {
       toast({ title: "Submission failed", description: err.message || "Please try again later", variant: "destructive" });
     } finally {
@@ -206,6 +221,23 @@ export default function Careers() {
         </div>
       </section>
 
+      {/* Signed-in user indicator */}
+      {user && (
+        <div className="container mx-auto px-4 max-w-4xl">
+          <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-primary/5 border border-primary/20 mb-4">
+            <div className="w-7 h-7 rounded-full gradient-brand flex items-center justify-center text-primary-foreground font-heading font-bold text-xs">
+              {(user.user_metadata?.full_name || user.email || "U").charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{user.user_metadata?.full_name || user.email}</p>
+            </div>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={async () => { await supabase.auth.signOut(); setUser(null); }}>
+              Sign out
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Open Positions */}
       <section className="py-16 bg-secondary/40">
         <div className="container mx-auto px-4 max-w-4xl">
@@ -214,162 +246,123 @@ export default function Careers() {
             <p className="text-muted-foreground text-center py-8">No open positions at the moment. Check back soon!</p>
           ) : (
             <div className="flex flex-col gap-4">
-              {vacancies.map((v, i) => (
-                <motion.div key={v.id} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.06 }}
-                  className="bg-card rounded-xl border border-border shadow-card hover:border-cyan-brand/30 transition-all overflow-hidden">
-                  <div className="p-5 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer" onClick={() => setExpandedId(expandedId === v.id ? null : v.id)}>
-                    <div className="flex-1">
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {v.department && <span className="text-xs px-2 py-0.5 bg-cyan-brand/10 text-cyan-brand rounded-full">{v.department}</span>}
-                        <Badge variant="outline" className="text-xs">{v.employment_type}</Badge>
-                        {v.location && <span className="text-xs px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full">{v.location}</span>}
+              {vacancies.map((v, i) => {
+                const isExpanded = expandedId === v.id;
+                const isApplying = applyingId === v.id;
+                const hasApplied = submittedIds.has(v.id);
+
+                return (
+                  <motion.div key={v.id} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.06 }}
+                    className="bg-card rounded-xl border border-border shadow-card hover:border-cyan-brand/30 transition-all overflow-hidden">
+                    <div className="p-5 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : v.id); if (isExpanded) setApplyingId(null); }}>
+                      <div className="flex-1">
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {v.department && <span className="text-xs px-2 py-0.5 bg-cyan-brand/10 text-cyan-brand rounded-full">{v.department}</span>}
+                          <Badge variant="outline" className="text-xs">{v.employment_type}</Badge>
+                          {v.location && <span className="text-xs px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full">{v.location}</span>}
+                        </div>
+                        <div className="font-heading font-semibold text-base">{v.title}</div>
+                        <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
+                          {v.openings > 0 && <span><Users className="w-3 h-3 inline mr-1" />{v.openings} opening{v.openings > 1 ? "s" : ""}</span>}
+                          {v.deadline && <span><Calendar className="w-3 h-3 inline mr-1" />Deadline: {format(new Date(v.deadline), "MMM d, yyyy")}</span>}
+                          {v.salary_range && <span><DollarSign className="w-3 h-3 inline mr-1" />{v.salary_range}</span>}
+                        </div>
                       </div>
-                      <div className="font-heading font-semibold text-base">{v.title}</div>
-                      <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
-                        {v.openings > 0 && <span><Users className="w-3 h-3 inline mr-1" />{v.openings} opening{v.openings > 1 ? "s" : ""}</span>}
-                        {v.deadline && <span><Calendar className="w-3 h-3 inline mr-1" />Deadline: {format(new Date(v.deadline), "MMM d, yyyy")}</span>}
-                        {v.salary_range && <span><DollarSign className="w-3 h-3 inline mr-1" />{v.salary_range}</span>}
-                      </div>
+                      <button className="shrink-0 px-4 py-2 gradient-brand text-primary-foreground text-sm font-heading font-semibold rounded-lg hover:opacity-90 transition-opacity">
+                        {isExpanded ? "Hide Details" : "View Details"}
+                      </button>
                     </div>
-                    <button className="shrink-0 px-4 py-2 gradient-brand text-primary-foreground text-sm font-heading font-semibold rounded-lg hover:opacity-90 transition-opacity">
-                      {expandedId === v.id ? "Hide Details" : "View Details"}
-                    </button>
-                  </div>
-                  {expandedId === v.id && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-border px-5 py-4 space-y-3 bg-muted/30">
-                      <DetailSection label="Job Description" value={v.description} />
-                      <DetailSection label="Responsibilities" value={v.responsibilities} />
-                      <DetailSection label="Qualifications" value={v.qualifications} />
-                      <DetailSection label="Skills" value={v.skills} />
-                      <DetailSection label="Experience" value={v.experience} />
-                      <DetailSection label="Education" value={v.education} />
-                      <DetailSection label="Certifications" value={v.certifications} />
-                      <DetailSection label="Benefits" value={v.benefits} />
-                      <DetailSection label="Working Hours" value={v.working_hours} />
-                      <DetailSection label="Reporting Manager" value={v.reporting_manager} />
-                    </motion.div>
-                  )}
-                </motion.div>
-              ))}
+
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                          className="border-t border-border">
+                          <div className="px-5 py-4 space-y-3 bg-muted/30">
+                            <DetailSection label="Job Description" value={v.description} />
+                            <DetailSection label="Responsibilities" value={v.responsibilities} />
+                            <DetailSection label="Qualifications" value={v.qualifications} />
+                            <DetailSection label="Skills" value={v.skills} />
+                            <DetailSection label="Experience" value={v.experience} />
+                            <DetailSection label="Education" value={v.education} />
+                            <DetailSection label="Certifications" value={v.certifications} />
+                            <DetailSection label="Benefits" value={v.benefits} />
+                            <DetailSection label="Working Hours" value={v.working_hours} />
+                            <DetailSection label="Reporting Manager" value={v.reporting_manager} />
+                          </div>
+
+                          {/* Apply Section */}
+                          <div className="px-5 py-4 border-t border-border bg-card">
+                            {hasApplied ? (
+                              <div className="flex items-center gap-3 p-4 rounded-lg bg-accent/10 border border-accent/30 text-center justify-center">
+                                <CheckCircle className="w-5 h-5 text-accent" />
+                                <span className="font-heading font-semibold text-sm">Application Submitted Successfully!</span>
+                              </div>
+                            ) : !isApplying ? (
+                              <Button onClick={(e) => { e.stopPropagation(); handleApplyClick(v.id); }}
+                                disabled={signingIn} size="lg"
+                                className="w-full gradient-brand text-primary-foreground font-heading font-semibold shadow-glow gap-2">
+                                {signingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <Briefcase className="w-4 h-4" />}
+                                {!user ? "Sign in with Google to Apply" : "Apply Now"}
+                              </Button>
+                            ) : (
+                              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="w-6 h-6 rounded-full gradient-brand flex items-center justify-center text-primary-foreground text-[10px] font-bold">
+                                    {(user?.user_metadata?.full_name || user?.email || "U").charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="text-sm font-medium">{user?.user_metadata?.full_name || user?.email}</span>
+                                  <span className="text-xs text-muted-foreground">({user?.email})</span>
+                                </div>
+
+                                {/* CV Upload */}
+                                <div>
+                                  <label className="block text-sm font-medium mb-1.5">CV / Resume (PDF or Word, max 10MB)</label>
+                                  <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="hidden" />
+                                  {cvFile ? (
+                                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-cyan-brand/30 bg-cyan-brand/5">
+                                      <FileText className="w-5 h-5 text-cyan-brand flex-shrink-0" />
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate">{cvFile.name}</p>
+                                        <p className="text-xs text-muted-foreground">{(cvFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                                      </div>
+                                      <button type="button" onClick={() => { setCvFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button type="button" onClick={() => fileInputRef.current?.click()}
+                                      className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-border hover:border-cyan-brand/40 bg-card text-sm text-muted-foreground hover:text-foreground transition-colors">
+                                      <Upload className="w-4 h-4" /> Click to upload your CV
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm font-medium mb-1.5">Cover Letter / Message *</label>
+                                  <textarea value={form.message} onChange={(e) => setForm({ message: e.target.value })} rows={4} placeholder="Tell us about yourself and why you're interested in this role..."
+                                    className="w-full px-4 py-2.5 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-ring resize-none" />
+                                </div>
+
+                                <div className="flex gap-2">
+                                  <Button variant="outline" className="flex-1" onClick={() => { setApplyingId(null); setForm({ message: "" }); setCvFile(null); }}>
+                                    Cancel
+                                  </Button>
+                                  <Button onClick={() => submitApplication(v)} disabled={submitting}
+                                    className="flex-1 gradient-brand text-primary-foreground font-heading shadow-glow gap-2">
+                                    {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit Application"}
+                                  </Button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
             </div>
-          )}
-        </div>
-      </section>
-
-      {/* Application Form */}
-      <section className="py-16 bg-background">
-        <div className="container mx-auto px-4 max-w-2xl">
-          <h2 className="font-heading font-bold text-3xl mb-2">Submit Your Application</h2>
-          <p className="text-muted-foreground text-sm mb-8">Don't see your role? We're always looking for talent.</p>
-
-          {submitted ? (
-            <div className="p-8 bg-card rounded-xl border border-cyan-brand/30 text-center shadow-card">
-              <div className="font-heading font-bold text-xl mb-2">Application Received!</div>
-              <p className="text-muted-foreground text-sm">Thank you for applying. We'll review your application and be in touch soon.</p>
-            </div>
-          ) : !authLoading && !user ? (
-            /* Sign in required */
-            <div className="p-8 bg-card rounded-xl border border-border shadow-card text-center space-y-4">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                <LogIn className="w-8 h-8 text-primary" />
-              </div>
-              <h3 className="font-heading font-semibold text-lg">Sign in to Apply</h3>
-              <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                Please sign in with your Google account to submit your application. This helps us communicate with you about your application status.
-              </p>
-              <Button onClick={handleGoogleSignIn} disabled={signingIn} size="lg"
-                className="gradient-brand text-primary-foreground gap-2 shadow-glow">
-                {signingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
-                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                  </svg>
-                )}
-                Sign in with Google
-              </Button>
-            </div>
-          ) : (
-            <form onSubmit={submit} className="space-y-4">
-              {user && (
-                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 flex items-center gap-3 mb-2">
-                  <div className="w-8 h-8 rounded-full gradient-brand flex items-center justify-center text-primary-foreground font-heading font-bold text-xs">
-                    {(user.user_metadata?.full_name || user.email || "U").charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{user.user_metadata?.full_name || user.email}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={async () => { await supabase.auth.signOut(); setUser(null); }}>
-                    Sign out
-                  </Button>
-                </div>
-              )}
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Full Name *</label>
-                  <input name="name" required value={form.name} onChange={handle} placeholder="Your name"
-                    className="w-full px-4 py-2.5 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-ring" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Email *</label>
-                  <input name="email" type="email" required value={form.email} onChange={handle} placeholder="you@email.com" readOnly={!!user}
-                    className="w-full px-4 py-2.5 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-ring read-only:opacity-70" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Position of Interest</label>
-                <select name="position" value={form.position} onChange={handle}
-                  className="w-full px-4 py-2.5 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-ring">
-                  <option value="">Select a position...</option>
-                  {vacancies.map(v => <option key={v.id}>{v.title}</option>)}
-                  <option>Other</option>
-                </select>
-              </div>
-
-              {/* CV Upload */}
-              <div>
-                <label className="block text-sm font-medium mb-1.5">CV / Resume (PDF or Word, max 10MB)</label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                {cvFile ? (
-                  <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-cyan-brand/30 bg-cyan-brand/5">
-                    <FileText className="w-5 h-5 text-cyan-brand flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{cvFile.name}</p>
-                      <p className="text-xs text-muted-foreground">{(cvFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
-                    <button type="button" onClick={() => { setCvFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => fileInputRef.current?.click()}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-border hover:border-cyan-brand/40 bg-card text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    <Upload className="w-4 h-4" />
-                    Click to upload your CV
-                  </button>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Cover Letter / Message *</label>
-                <textarea name="message" required value={form.message} onChange={handle} rows={5} placeholder="Tell us about yourself..."
-                  className="w-full px-4 py-2.5 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-ring resize-none" />
-              </div>
-              <button type="submit" disabled={submitting}
-                className="w-full py-3 gradient-brand text-primary-foreground font-heading font-semibold rounded-lg hover:opacity-90 transition-opacity shadow-glow disabled:opacity-60 flex items-center justify-center gap-2">
-                {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit Application"}
-              </button>
-            </form>
           )}
         </div>
       </section>
