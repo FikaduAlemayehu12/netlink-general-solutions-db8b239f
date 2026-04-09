@@ -425,6 +425,72 @@ export default function StaffDashboard() {
             )}
           </div>
         </div>
+
+        {/* Internal Vacancies & Staff Content */}
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Internal Vacancies */}
+          <Card>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-heading flex items-center gap-1.5">
+                <Briefcase className="w-4 h-4 text-primary" />Job Openings
+              </CardTitle>
+              {isCeo && (
+                <Link to="/staff/vacancies">
+                  <Button size="sm" variant="outline" className="text-xs gap-1"><Plus className="w-3 h-3" />Manage</Button>
+                </Link>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {internalVacancies.length === 0 && <p className="text-muted-foreground text-sm text-center py-4">No openings</p>}
+              {internalVacancies.map((v: any) => (
+                <Link key={v.id} to="/staff/vacancies" className="block p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-heading font-semibold ${v.vacancy_type === "internal" ? "bg-gold/10 text-gold" : "bg-cyan-brand/10 text-cyan-brand"}`}>
+                      {v.vacancy_type === "internal" ? "Internal" : "External"}
+                    </span>
+                    <Badge variant="outline" className="text-[10px]">{v.employment_type}</Badge>
+                  </div>
+                  <div className="text-sm font-heading font-semibold">{v.title}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {v.department && `${v.department} · `}{v.openings} opening{v.openings > 1 ? "s" : ""}
+                    {v.deadline && ` · Due ${new Date(v.deadline).toLocaleDateString()}`}
+                  </div>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Staff News & Content */}
+          <Card>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-heading flex items-center gap-1.5">
+                <Newspaper className="w-4 h-4 text-primary" />News & Content
+              </CardTitle>
+              {isCeo && (
+                <Link to="/staff/site-content">
+                  <Button size="sm" variant="outline" className="text-xs gap-1"><Plus className="w-3 h-3" />Manage</Button>
+                </Link>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {staffContent.length === 0 && <p className="text-muted-foreground text-sm text-center py-4">No content published</p>}
+              {staffContent.map((c: any) => (
+                <Link key={c.id} to="/staff/site-content" className="block p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-heading font-semibold ${c.content_type === "news" ? "bg-primary/10 text-primary" : c.content_type === "testimonial" ? "bg-gold/10 text-gold" : "bg-cyan-brand/10 text-cyan-brand"}`}>
+                      {c.content_type}
+                    </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${c.audience === "staff" ? "bg-muted text-muted-foreground" : c.audience === "client" ? "bg-cyan-brand/10 text-cyan-brand" : "bg-primary/10 text-primary"}`}>
+                      {c.audience === "both" ? "Staff & Client" : c.audience}
+                    </span>
+                  </div>
+                  <div className="text-sm font-heading font-semibold">{c.title}</div>
+                  {c.content && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{c.content}</p>}
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Announcement Detail Dialog */}
